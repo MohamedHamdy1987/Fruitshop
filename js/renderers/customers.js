@@ -1,71 +1,58 @@
-// ============================================================
-// renderers/customers.js — إدارة العملاء (API-first)
-// ============================================================
+// ===================== renderers/customers.js — العملاء (معدل - بدون شرط shop_name) =====================
 
-// ─── Helper: رصيد العميل من store (محلي) ───────────────────
 function getCustBal(id) {
-  const c = (store.custs || []).find(x => x.id === id || x.id == id);
-  return parseFloat(c?.balance || 0);
+  const c = S.customers.find(x => x.id == id);
+  if (!c) return 0;
+  return c.ledger.reduce((s, e) =>
+    e.type === 'order' ? s + e.amount : (e.type === 'payment' || e.type === 'discount') ? s - e.amount : s, 0);
 }
 
-// ─── إضافة عميل ────────────────────────────────────────────
-async function addCustomer() {
+function addCustomer() {
   const name  = document.getElementById('nc-name').value.trim();
   const phone = document.getElementById('nc-phone').value.trim();
   const bal   = parseFloat(document.getElementById('nc-balance').value) || 0;
-  if (!name) return Toast.warning('أدخل اسم العميل');
-
-  const btn = event.target;
-  btn.disabled = true; btn.textContent = '...';
-  try {
-    await API.customers.add({ name, phone, initialBalance: bal });
-    const updated = await API.customers.list();
-    store.set('customers', updated);
-    ['nc-name','nc-phone','nc-balance'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-    Toast.success(`✅ تم إضافة ${name}`);
-    renderCustList();
-    refreshDropdowns();
-  } catch(e) { AppError.log('addCustomer', e, true); }
-  finally { btn.disabled = false; btn.textContent = '➕ إضافة'; }
-}
-
-// ─── حذف عميل ──────────────────────────────────────────────
-async function delCustomer(id) {
-  const c = (store.custs||[]).find(x => x.id === id || x.id == id);
-  if (!confirm(`حذف العميل "${c?.name}"؟ لن يُمسح من قاعدة البيانات (Soft Delete)`)) return;
-  try {
-    await API.customers.delete(id);
-    store.set('customers', (store.custs||[]).filter(c => c.id !== id && c.id != id));
-    Toast.success('تم الحذف');
-    renderCustList();
-    refreshDropdowns();
-  } catch(e) { AppError.log('delCustomer', e, true); }
-}
-
-// ─── عرض قائمة العملاء ─────────────────────────────────────
-function renderCustList() {
-  const container = document.getElementById('cust-list-cont');
-  if (!container) return;
-  const custs = store.custs || [];
-  if (!custs.length) {
-    container.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">👤</div>
-      <div class="empty-title">لا يوجد عملاء بعد</div>
-      <div class="empty-sub">أضف أول عميل لتبدأ</div>
-    </div>`;
-    return;
+  if (!name) return alert('أدخل اسم العميل');
+  
+  // التأكد من وجود user_metadata.shop_name بشكل افتراضي إذا لم يكن موجوداً
+  if (currentUser && !currentUser.user_metadata) currentUser.user_metadata = {};
+  if (currentUser && !currentUser.user_metadata.shop_name) {
+    currentUser.user_metadata.shop_name = 'محل افتراضي';
   }
-  container.innerHTML = custs.map(cust => {
-    const bal = parseFloat(cust.balance || 0);
+  
+  const cust = { id: Date.now(), name, phone, ledger: [] };
+  if (bal > 0) cust.ledger.push({ date: S.date, type: 'order', amount: bal, ref: 'رصيد منقول من الدفاتر', isTarhil: false });
+  S.customers.push(cust);
+  ['nc-name', 'nc-phone', 'nc-balance'].forEach(id => document.getElementById(id).value = '');
+  save();
+  renderCustList();
+  refreshDropdowns();
+  showToast(`تم إضافة العميل ${name}`, 'success');
+}
+
+function delCustomer(id) {
+  if (!confirm('حذف هذا العميل وكل حركاته؟')) return;
+  S.customers    = S.customers.filter(c => c.id != id);
+  S.collections  = S.collections.filter(c => c.custId != id);
+  save();
+  renderCustList();
+  refreshDropdowns();
+  showToast('تم حذف العميل', 'success');
+}
+
+function renderCustList() {
+  const c = document.getElementById('cust-list-cont');
+  if (!S.customers.length) { c.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px">لا يوجد عملاء</p>'; return; }
+  c.innerHTML = S.customers.map(cust => {
+    const bal = getCustBal(cust.id);
     return `<div class="card customer-card" style="cursor:pointer"
       data-name="${cust.name.toLowerCase()}" data-phone="${(cust.phone||'').toLowerCase()}"
-      onclick="openCustDetail('${cust.id}')">
+      onclick="openCustDetail(${cust.id})">
       <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;background:var(--blue-light);border-bottom:2px solid #c5d8e8">
         <div style="display:flex;align-items:center;gap:9px">
           <span>👤</span>
           <div>
-            <div style="font-weight:800;color:var(--blue)">${cust.name}</div>
-            <div style="font-size:0.74rem;color:var(--gray)">${cust.phone || 'لا يوجد هاتف'}</div>
+            <div style="font-weight:800;color:var(--blue)">${escapeHtml(cust.name)}</div>
+            <div style="font-size:0.74rem;color:var(--gray)">${escapeHtml(cust.phone || 'لا يوجد هاتف')}</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -73,7 +60,7 @@ function renderCustList() {
             <div style="font-size:0.74rem;color:var(--gray)">الرصيد</div>
             <div style="font-weight:900;color:${bal > 0 ? 'var(--red)' : 'var(--green)'}">${N(bal)} جنيه</div>
           </div>
-          <button class="btn btn-r btn-xs no-print" onclick="event.stopPropagation();delCustomer('${cust.id}')">🗑️</button>
+          <button class="btn btn-r btn-xs no-print" onclick="event.stopPropagation();delCustomer(${cust.id})">🗑️</button>
         </div>
       </div>
     </div>`;
@@ -82,91 +69,80 @@ function renderCustList() {
   if (kw) filterCustomersList();
 }
 
-// ─── بحث ───────────────────────────────────────────────────
-function filterCustomersList() {
-  const kw = document.getElementById('searchCustomerInput')?.value.trim().toLowerCase() || '';
-  document.querySelectorAll('#cust-list-cont .customer-card').forEach(card => {
-    const match = (card.getAttribute('data-name')||'').includes(kw) ||
-                  (card.getAttribute('data-phone')||'').includes(kw);
-    card.style.display = match ? '' : 'none';
-  });
+function renderCustListFiltered(keyword) {
+  const filtered = S.customers.filter(c =>
+    c.name.toLowerCase().includes(keyword) || (c.phone && c.phone.toLowerCase().includes(keyword)));
+  const c = document.getElementById('cust-list-cont');
+  if (!filtered.length) { c.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px">لا توجد نتائج مطابقة</p>'; return; }
+  c.innerHTML = filtered.map(cust => {
+    const bal = getCustBal(cust.id);
+    return `<div class="card customer-card" style="cursor:pointer"
+      data-name="${cust.name.toLowerCase()}" data-phone="${(cust.phone||'').toLowerCase()}"
+      onclick="openCustDetail(${cust.id})">
+      <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;background:var(--blue-light);border-bottom:2px solid #c5d8e8">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span>👤</span>
+          <div>
+            <div style="font-weight:800;color:var(--blue)">${escapeHtml(cust.name)}</div>
+            <div style="font-size:0.74rem;color:var(--gray)">${escapeHtml(cust.phone || 'لا يوجد هاتف')}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="text-align:left">
+            <div style="font-size:0.74rem;color:var(--gray)">الرصيد</div>
+            <div style="font-weight:900;color:${bal > 0 ? 'var(--red)' : 'var(--green)'}">${N(bal)} جنيه</div>
+          </div>
+          <button class="btn btn-r btn-xs" onclick="event.stopPropagation();delCustomer(${cust.id})">🗑️</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-// ─── تفاصيل العميل (Ledger من DB) ──────────────────────────
-async function openCustDetail(id) {
-  const c = (store.custs||[]).find(x => x.id === id || x.id == id);
+function filterCustomersList() {
+  const kw    = document.getElementById('searchCustomerInput').value.trim().toLowerCase();
+  const cards = document.querySelectorAll('#cust-list-cont .customer-card');
+  if (cards.length) {
+    cards.forEach(card => {
+      const name  = card.getAttribute('data-name')  || '';
+      const phone = card.getAttribute('data-phone') || '';
+      card.style.display = (name.includes(kw) || phone.includes(kw)) ? '' : 'none';
+    });
+  } else {
+    renderCustListFiltered(kw);
+  }
+}
+
+function openCustDetail(id) {
+  const c = S.customers.find(x => x.id == id);
   if (!c) return;
   document.getElementById('cust-list-view').style.display   = 'none';
   document.getElementById('cust-detail-view').style.display = 'block';
-  document.getElementById('cd-name').textContent = c.name;
-  document.getElementById('cd-bal').textContent  = N(parseFloat(c.balance||0)) + ' جنيه';
-  document.getElementById('cd-body').innerHTML   = '<div class="skeleton" style="height:200px"></div>';
-
-  try {
-    const { sales, payments } = await API.customers.getLedger(id);
-    _renderCustLedger(c, sales, payments);
-  } catch(e) {
-    AppError.log('openCustDetail', e);
-    document.getElementById('cd-body').innerHTML = '<p style="color:var(--red);padding:16px">خطأ في تحميل البيانات</p>';
-  }
-}
-
-function _renderCustLedger(cust, sales, payments) {
-  // دمج المبيعات والمدفوعات وترتيبها بالتاريخ
-  const entries = [
-    ...(sales||[]).map(s => ({
-      date:   s.sale_date,
-      type:   'sale',
-      amount: parseFloat(s.total_amount),
-      ref:    s.product?.name || '-',
-      is_cash: s.is_cash
-    })),
-    ...(payments||[]).map(p => ({
-      date:   p.payment_date,
-      type:   p.payment_type === 'collection' ? 'payment' : 'discount',
-      amount: parseFloat(p.amount) + parseFloat(p.discount_amount||0),
-      ref:    p.description || '-'
-    }))
-  ].sort((a,b) => a.date.localeCompare(b.date));
-
-  if (!entries.length) {
-    document.getElementById('cd-body').innerHTML = `<div class="empty-state">
-      <div class="empty-icon">📋</div>
-      <div class="empty-title">لا توجد حركات</div>
-    </div>`;
+  document.getElementById('cd-name').textContent = escapeHtml(c.name);
+  const bal = getCustBal(id);
+  document.getElementById('cd-bal').textContent = N(bal) + ' جنيه';
+  const sorted = [...c.ledger].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) {
+    document.getElementById('cd-body').innerHTML = '<p style="text-align:center;color:#aaa;padding:24px">لا توجد حركات</p>';
     return;
   }
-
-  let running = 0;
-  let html = entries.map(e => {
-    const isSale = e.type === 'sale';
-    if (isSale) running += e.amount; else running -= e.amount;
-    const amtColor = isSale ? 'var(--blue)' : 'var(--red)';
-    const balColor = running > 0 ? 'var(--red)' : 'var(--green)';
-    const dateStr  = new Date(e.date).toLocaleDateString('ar-EG',{month:'short',day:'numeric'});
-    let lbl = isSale
-      ? `<span style="color:#555">📦 ${e.ref}</span>`
-      : `<span style="color:var(--red)">✅ ${e.ref}</span>`;
-    return `<div style="display:flex;align-items:center;gap:7px;padding:8px 3px;border-bottom:1px solid #f0f0f0;font-size:0.83rem;flex-wrap:wrap">
-      <span style="color:var(--gray);font-size:0.75rem;min-width:52px">${dateStr}</span>
-      <span style="font-weight:900;color:${amtColor};min-width:90px">${isSale?'+':'-'}${N(e.amount)} ج</span>
+  let run = 0, html = '';
+  sorted.forEach(e => {
+    const isOrd = e.type === 'order';
+    if (isOrd) run += e.amount; else run -= e.amount;
+    const ac = isOrd ? 'var(--blue)' : 'var(--red)';
+    const bc = run > 0 ? 'var(--red)' : 'var(--green)';
+    let lbl = '';
+    if (isOrd && e.isTarhil) lbl = `<span style="color:#784212;font-weight:800;cursor:pointer;text-decoration:underline" onclick="goToTarhilDate('${e.tarhilDate}')">يومية ${e.date}</span>`;
+    else if (isOrd)          lbl = `<span style="color:#555">${escapeHtml(e.ref || 'طلب')}</span>`;
+    else                     lbl = `<span style="color:var(--red)">${e.type === 'discount' ? 'خصم — ' : 'دفعة — '}${escapeHtml(e.ref || '')}</span>`;
+    html += `<div style="display:flex;align-items:center;gap:7px;padding:7px 3px;border-bottom:1px solid #f0f0f0;font-size:0.84rem;flex-wrap:wrap">
+      <span style="font-weight:900;color:${ac};font-size:0.93rem;min-width:85px">${isOrd ? '+' : '-'}${N(e.amount)} جنيه</span>
       <span style="flex:1;font-size:0.79rem">${lbl}</span>
-      <span style="font-weight:800;font-size:0.78rem;color:${balColor}">باقي: ${N(Math.abs(running))} ج</span>
-    </div>`;
-  }).join('');
-
-  const finalBal = parseFloat(cust.balance || 0);
-  html += `<div class="netbox" style="margin-top:10px">
-    <span>إجمالي الحساب</span>
-    <span>${N(finalBal)} جنيه</span>
-  </div>`;
-
-  // زر تسجيل دفعة
-  html += `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn btn-g btn-sm" onclick="openAddPaymentModal('${cust.id}','${cust.name}')">💵 تسجيل دفعة</button>
-    <button class="btn btn-b btn-sm" onclick="shareCustomerWhatsApp('${cust.id}')">📱 واتساب</button>
-  </div>`;
-
+      <span style="font-weight:800;font-size:0.78rem;color:${bc}">باقي: ${N(run)}</span>
+    </div>${isOrd ? '<div style="border-bottom:1.5px dashed #ddd;margin:2px 0"></div>' : ''}`;
+  });
+  html += `<div class="netbox"><span>إجمالي الحساب</span><span>${N(bal)} جنيه</span></div>`;
   document.getElementById('cd-body').innerHTML = html;
 }
 
@@ -175,78 +151,29 @@ function showCustList() {
   document.getElementById('cust-detail-view').style.display = 'none';
 }
 
-// ─── مودال تسجيل دفعة ──────────────────────────────────────
-function openAddPaymentModal(custId, custName) {
-  const modal = document.getElementById('add-payment-modal');
-  if (!modal) return;
-  document.getElementById('apm-cust-name').textContent = custName;
-  document.getElementById('apm-cust-id').value = custId;
-  ['apm-amount','apm-discount','apm-note'].forEach(id => {
-    const el = document.getElementById(id); if(el) el.value = '';
+function shareCustomerWhatsApp() {
+  const custName = document.getElementById('cd-name').textContent;
+  const customer = S.customers.find(c => c.name === custName);
+  if (!customer) return alert('لم يتم العثور على العميل');
+  const entries = customer.ledger || [];
+  if (!entries.length) return alert('لا توجد حركات لهذا العميل');
+  let ledgerText = '', running = 0;
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  sorted.forEach(e => {
+    if (e.type === 'order') running += e.amount; else running -= e.amount;
+    const typeDesc = e.type === 'order' ? 'فاتورة' : (e.type === 'discount' ? 'خصم' : 'دفعة');
+    ledgerText += `${e.date} | ${typeDesc} | ${e.amount} ج | الرصيد: ${running} ج\n`;
   });
-  modal.classList.add('open');
+  const finalBalance = running;
+  const status   = finalBalance > 0 ? 'مدين' : (finalBalance < 0 ? 'دائن' : 'متزن');
+  const shopName = currentUser?.user_metadata?.shop_name || 'المحل';
+  const msg = `*بيان حساب العميل*\n🏢 ${shopName}\n👤 العميل: ${customer.name}\n📞 الهاتف: ${customer.phone || 'غير مسجل'}\n📅 التاريخ: ${S.date}\n━━━━━━━━━━━━━━━━━━━\n*الحركات:*\n${ledgerText}━━━━━━━━━━━━━━━━━━━\n💰 *الرصيد الحالي:* ${Math.abs(finalBalance)} ج\n📝 *الحالة:* ${status}\n━━━━━━━━━━━━━━━━━━━\n_تم إنشاء هذا التقرير آلياً من نظام إدارة المحل._`;
+  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
-async function submitPaymentModal() {
-  const custId   = document.getElementById('apm-cust-id').value;
-  const amount   = parseFloat(document.getElementById('apm-amount').value) || 0;
-  const discount = parseFloat(document.getElementById('apm-discount').value) || 0;
-  const note     = document.getElementById('apm-note').value.trim();
-  if (amount <= 0 && discount <= 0) return Toast.warning('أدخل مبلغ أو قطعية');
-
-  const btn = event.target;
-  btn.disabled = true; btn.textContent = '...';
-  try {
-    if (amount > 0) {
-      await API.payments.addCollection({
-        customerId:  custId,
-        amount,
-        discount:    0,
-        description: note || 'تحصيل',
-        date:        store._state.currentDate
-      });
-    }
-    if (discount > 0) {
-      await API.payments.addCollection({
-        customerId:  custId,
-        amount:      discount,
-        discount:    discount,
-        description: note ? `قطعية — ${note}` : 'قطعية',
-        date:        store._state.currentDate
-      });
-    }
-    const updated = await API.customers.list();
-    store.set('customers', updated);
-    closeModal('add-payment-modal');
-    Toast.success('✅ تم تسجيل الدفعة');
-    const cust = updated.find(c => c.id === custId);
-    if (cust) openCustDetail(custId);
-  } catch(e) { AppError.log('submitPaymentModal', e, true); }
-  finally { btn.disabled = false; btn.textContent = '✅ تأكيد'; }
-}
-
-// ─── واتساب ────────────────────────────────────────────────
-async function shareCustomerWhatsApp(custId) {
-  const cust = (store.custs||[]).find(c => c.id === custId || c.id == custId);
-  if (!cust) return;
-  try {
-    const { sales, payments } = await API.customers.getLedger(custId);
-    const entries = [
-      ...(sales||[]).map(s => ({ date:s.sale_date, type:'sale', amount:parseFloat(s.total_amount), ref:s.product?.name||'-' })),
-      ...(payments||[]).map(p => ({ date:p.payment_date, type:'payment', amount:parseFloat(p.amount), ref:p.description||'-' }))
-    ].sort((a,b) => a.date.localeCompare(b.date));
-
-    let running = 0, txt = '';
-    entries.forEach(e => {
-      if (e.type==='sale') running += e.amount; else running -= e.amount;
-      const tp = e.type==='sale' ? 'فاتورة' : 'دفعة';
-      txt += `${e.date} | ${tp} | ${e.amount} ج | الرصيد: ${running} ج\n`;
-    });
-
-    const shopName = currentUser?.company_name || 'المحل';
-    const bal = parseFloat(cust.balance||0);
-    const status = bal>0 ? 'مدين' : bal<0 ? 'دائن' : 'متزن';
-    const msg = `*بيان حساب العميل*\n🏢 ${shopName}\n👤 ${cust.name}\n📞 ${cust.phone||'غير مسجل'}\n📅 ${new Date().toLocaleDateString('ar-EG')}\n━━━━━━━━━━\n${txt}━━━━━━━━━━\n💰 *الرصيد:* ${N(Math.abs(bal))} ج\n📝 *الحالة:* ${status}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-  } catch(e) { AppError.log('shareWhatsApp', e, true); }
+// إضافة دالة showToast إذا لم تكن موجودة (ضمان التوافق)
+if (typeof showToast !== 'function') {
+  window.showToast = function(msg, type) {
+    alert(msg);
+  };
 }
