@@ -45,7 +45,6 @@ async function doLogin() {
     btn.disabled = false; btn.textContent = '🔑 دخول';
   }
 }
-
 async function doRegister() {
   const shop  = document.getElementById('reg-shop').value.trim();
   const email = document.getElementById('reg-email').value.trim();
@@ -55,28 +54,40 @@ async function doRegister() {
   if (!shop || !email || !pass) return showAuthErr('أكمل جميع البيانات');
   if (pass !== pass2)           return showAuthErr('كلمة المرور غير متطابقة');
   if (pass.length < 8)          return showAuthErr('كلمة المرور أقل من ٨ أحرف');
-  if (!email.includes('@'))     return showAuthErr('بريد إلكتروني غير صحيح');
 
   const btn = document.getElementById('reg-btn');
   btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
 
   try {
-    const { data, error } = await sb.auth.signUp({
-      email, password: pass,
+    const { error } = await sb.auth.signUp({
+      email,
+      password: pass,
       options: { data: { shop_name: shop } }
     });
+
     if (error) throw error;
-    currentUser = data.user;
-    // Profile يُنشأ تلقائياً بـ Trigger في قاعدة البيانات
+
+    // 🔥 اعمل تسجيل دخول بعد التسجيل
+    const { data: loginData, error: loginError } =
+      await sb.auth.signInWithPassword({ email, password: pass });
+
+    if (loginError) throw loginError;
+
+    currentUser = loginData.user;
+
+    console.log('USER AFTER LOGIN:', currentUser);
+
     await loadUserProfile();
     await showApp();
-    Toast.success(`مرحباً بك في ${shop}! تجربة مجانية ١٤ يوم`);
+
+    Toast.success(`مرحباً بك في ${shop}!`);
+
   } catch (e) {
-    const isExisting = e?.message?.toLowerCase().includes('already');
-    showAuthErr(isExisting ? 'هذا البريد مسجّل بالفعل' : 'حدث خطأ: ' + (e?.message || ''));
+    showAuthErr('حدث خطأ: ' + (e?.message || ''));
     AppError.log('doRegister', e);
   } finally {
-    btn.disabled = false; btn.textContent = '✅ إنشاء حساب مجاني';
+    btn.disabled = false;
+    btn.textContent = '✅ إنشاء حساب مجاني';
   }
 }
 
