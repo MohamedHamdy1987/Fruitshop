@@ -1,273 +1,142 @@
-// ============================================================
-// js/data.js — طبقة البيانات والحالة المركزية
-// ============================================================
+// ===================== data.js — نسخة محلية بسيطة (بدون سحابة) =====================
 
-const SUPABASE_URL = 'https://lfhrorjiukzkqhafjtdd.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxmaHJvcmppdWt6a3FoYWZqdGRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3OTc3NTgsImV4cCI6MjA5MDM3Mzc1OH0.eQ0w4DG_-DNvnJRJxgvJ7KhNNkBhOEswQhtbiO2my3Q';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// ─── State ───────────────────────────────────────────────────
-const store = {
-  _state: {
-    inventory: [], customers: [], suppliers: [], products: [],
-    employees: [], partners: [], shops: [], sales: [], payments: [],
-    invoices: [], currentDate: new Date().toISOString().slice(0,10),
-    activeProduct: null, isLoading: false, lastSync: null
+// Supabase معطل مؤقتاً
+const sb = {
+  auth: {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    signInWithPassword: async () => ({ data: null, error: new Error("محلي") }),
+    signUp: async () => ({ data: null, error: new Error("محلي") }),
+    signOut: async () => ({ error: null })
   },
-  get state()  { return this._state; },
-  get inv()    { return this._state.inventory; },
-  get custs()  { return this._state.customers; },
-  get supps()  { return this._state.suppliers; },
-  get prods()  { return this._state.products; },
-  get emps()   { return this._state.employees; },
-  get parts()  { return this._state.partners; },
-  get shps()   { return this._state.shops; },
-  get sales()  { return this._state.sales; },
-  get pays()   { return this._state.payments; },
-  get invs()   { return this._state.invoices; },
-  set(key, value) { if (key in this._state) this._state[key] = value; },
-  setLoading(v)   { this._state.isLoading = v; },
-  reset() {
-    ['inventory','customers','suppliers','products','employees',
-     'partners','shops','sales','payments','invoices'].forEach(k => this._state[k]=[]);
-    Cache.clear();
-  }
+  from: () => ({
+    select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+    insert: async () => ({ error: null }),
+    upsert: async () => ({ error: null })
+  })
 };
 
-// اختصار للتوافق مع الكود القديم
-const S = store._state;
+// إدارة التخزين المحلي
+const store = {
+  _state: null,
+  init() {
+    const saved = localStorage.getItem('veg_state');
+    if (saved) {
+      try {
+        this._state = JSON.parse(saved);
+      } catch(e) {
+        this._state = this._getDefaultState();
+      }
+    } else {
+      this._state = this._getDefaultState();
+    }
+    this._normalize();
+  },
+  _getDefaultState() {
+    return {
+      date: new Date().toLocaleDateString('ar-EG'),
+      products: [],
+      customers: [],
+      suppliers: [],
+      invoices: [],
+      collections: [],
+      expenses: [],
+      tarhilLog: {},
+      employees: [],
+      partners: [],
+      shops: []
+    };
+  },
+  _normalize() {
+    const st = this._state;
+    if (!st.customers) st.customers = [];
+    if (!st.suppliers) st.suppliers = [];
+    if (!st.products) st.products = [];
+    if (!st.invoices) st.invoices = [];
+    if (!st.collections) st.collections = [];
+    if (!st.expenses) st.expenses = [];
+    if (!st.tarhilLog) st.tarhilLog = {};
+    if (!st.employees) st.employees = [];
+    if (!st.partners) st.partners = [];
+    if (!st.shops) st.shops = [];
+    if (!st.date) st.date = new Date().toLocaleDateString('ar-EG');
+  },
+  get state() { return this._state; },
+  set(updater) {
+    try {
+      updater(this._state);
+      this._persist();
+    } catch(e) { console.error(e); }
+  },
+  replace(newState) {
+    this._state = newState;
+    this._normalize();
+    this._persist();
+  },
+  _persist() {
+    localStorage.setItem('veg_state', JSON.stringify(this._state));
+  },
+  serialize() { return JSON.stringify(this._state); }
+};
 
-// ─── المستخدم الحالي ─────────────────────────────────────────
+const S = store.state;
 let currentUser = null;
 let xProd = null;
 
-// ─── معالجة الأخطاء ─────────────────────────────────────────
 const AppError = {
-  log(context, error, notifyUser = false) {
-    const msg = error?.message || String(error);
-    console.error(`[${context}]`, msg, error);
-    if (notifyUser) Toast.error(`خطأ: ${msg}`);
-  },
-  async handle(context, fn) {
-    try { return await fn(); }
-    catch (e) { this.log(context, e, true); return null; }
-  }
+  log(context, error) { console.error(context, error); },
+  supabase(context, error) { console.error(context, error); }
 };
 
-// ─── Toast ───────────────────────────────────────────────────
-const Toast = {
-  _c: null,
-  _get() { return this._c || (this._c = document.getElementById('toast-container')); },
-  show(msg, type='info', dur=3500) {
-    const c = this._get(); if (!c) return;
-    const t = document.createElement('div');
-    t.className = `toast toast-${type}`;
-    const icons = { success:'✅', error:'❌', warning:'⚠️', info:'ℹ️' };
-    t.innerHTML = `<span class="toast-icon">${icons[type]||'ℹ️'}</span><span class="toast-msg">${msg}</span>`;
-    c.appendChild(t);
-    requestAnimationFrame(() => t.classList.add('show'));
-    setTimeout(() => { t.classList.remove('show'); setTimeout(()=>t.remove(),350); }, dur);
-  },
-  success(msg) { this.show(msg,'success'); },
-  error(msg)   { this.show(msg,'error',5000); },
-  warning(msg) { this.show(msg,'warning'); },
-  info(msg)    { this.show(msg,'info'); }
-};
-
-// ─── Sync Status ─────────────────────────────────────────────
 const syncUI = {
   setStatus(status, msg) {
-    window.dispatchEvent(new CustomEvent('sync-status', { detail: { status, msg } }));
+    document.dispatchEvent(new CustomEvent('sync-status', { detail: { status, msg } }));
   }
 };
 
-// ─── تحميل Profile مع Fallback ──────────────────────────────
-async function loadUserProfile() {
-  if (!currentUser?.id) return;
-  try {
-    // محاولة جلب الـ profile
-    const { data: profile, error } = await sb
-      .from('profiles')
-      .select('*, company:companies(*)')
-      .eq('id', currentUser.id)
-      .maybeSingle();   // maybeSingle بدل single — لا يرمي error لو فاضي
+async function loadUserData() {}
+function save() { store._persist(); }
+function saveData() {}
 
-    if (profile) {
-      // profile موجود — استخدمه
-      currentUser.company_id   = profile.company_id;
-      currentUser.role         = profile.role || 'owner';
-      currentUser.full_name    = profile.full_name;
-      currentUser.company_name = profile.company?.name;
-      currentUser.subscription = profile.company?.subscription || 'trial';
-      currentUser.trial_ends   = profile.company?.trial_ends;
-      currentUser.sub_ends     = profile.company?.sub_ends;
-      console.log('✅ Profile loaded:', currentUser.company_name, '| Role:', currentUser.role);
-    } else {
-      // لا يوجد profile — إنشاء شركة وprofile تلقائياً
-      console.warn('⚠️ No profile found — creating company automatically...');
-      await _createCompanyAndProfile();
-    }
-  } catch (e) {
-    console.error('loadUserProfile error:', e);
-    // Fallback أخير: إنشاء شركة
-    await _createCompanyAndProfile();
-  }
-}
-
-// ─── إنشاء شركة وprofile تلقائياً ───────────────────────────
-async function _createCompanyAndProfile() {
-  try {
-    const shopName = currentUser.user_metadata?.shop_name ||
-                     currentUser.email?.split('@')[0] ||
-                     'محل جديد';
-
-    // 1. إنشاء شركة
-    const { data: company, error: cErr } = await sb
-      .from('companies')
-      .insert({
-        name:         shopName,
-        owner_id:     currentUser.id,
-        subscription: 'trial',
-        trial_ends:   new Date(Date.now() + 14*86400000).toISOString()
-      })
-      .select()
-      .single();
-
-    if (cErr) {
-      // الشركة موجودة بالفعل؟ اجلبها
-      if (cErr.code === '23505') {
-        const { data: existing } = await sb
-          .from('companies')
-          .select('*')
-          .eq('owner_id', currentUser.id)
-          .maybeSingle();
-        if (existing) {
-          currentUser.company_id   = existing.id;
-          currentUser.company_name = existing.name;
-          currentUser.subscription = existing.subscription || 'trial';
-          await _ensureProfile(existing.id, shopName);
-          return;
-        }
-      }
-      throw cErr;
-    }
-
-    currentUser.company_id   = company.id;
-    currentUser.company_name = company.name;
-    currentUser.subscription = 'trial';
-    currentUser.role         = 'owner';
-
-    // 2. إنشاء profile
-    await _ensureProfile(company.id, shopName);
-
-    console.log('✅ Company & profile created:', shopName);
-    Toast.success(`مرحباً! تم إنشاء شركتك: ${shopName}`);
-  } catch (e) {
-    console.error('_createCompanyAndProfile error:', e);
-
-    // Fallback نهائي: استخدم user_metadata لو كل شيء فشل
-    if (currentUser.user_metadata?.company_id) {
-      currentUser.company_id = currentUser.user_metadata.company_id;
-    } else {
-      // آخر خيار: استخدم user.id كـ company_id مؤقت
-      currentUser.company_id = currentUser.id;
-      currentUser.company_name = currentUser.email?.split('@')[0] || 'محلي';
-      currentUser.role = 'owner';
-      console.warn('⚠️ Using user.id as temporary company_id');
-      Toast.warning('تحذير: لم يتم إنشاء الشركة في قاعدة البيانات. تأكد من تنفيذ schema.sql');
-    }
-  }
-}
-
-async function _ensureProfile(companyId, fullName) {
-  const { error } = await sb.from('profiles').upsert({
-    id:         currentUser.id,
-    company_id: companyId,
-    full_name:  fullName,
-    role:       'owner'
-  }, { onConflict: 'id' });
-  if (error) console.error('_ensureProfile error:', error);
-  else currentUser.role = 'owner';
-}
-
-// ─── تحميل بيانات التطبيق ────────────────────────────────────
-async function loadAppData() {
-  if (!currentUser?.company_id) {
-    console.error('loadAppData: no company_id!');
-    Toast.error('خطأ: لا يوجد company_id. تأكد من تنفيذ schema.sql في Supabase');
+// دوال المصادقة المحلية
+window.doLogin = function() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  if (!email || !pass) {
+    alert("أدخل البريد وكلمة المرور");
     return;
   }
-
-  store.setLoading(true);
-  syncUI.setStatus('saving', 'جاري تحميل البيانات...');
-
-  try {
-    // تحميل بيانات أساسية — كل واحدة مستقلة لو فشلت
-    const results = await Promise.allSettled([
-      API.customers.list(),
-      API.suppliers.list(),
-      API.products.list(),
-      API.employees.list(),
-      API.partners.list(),
-      API.shops.list(),
-      API.invoices.list()
-    ]);
-
-    const [customers, suppliers, products, employees, partners, shops, invoices] = results.map(r =>
-      r.status === 'fulfilled' ? (r.value || []) : []
-    );
-
-    store.set('customers', customers);
-    store.set('suppliers', suppliers);
-    store.set('products',  products);
-    store.set('employees', employees);
-    store.set('partners',  partners);
-    store.set('shops',     shops);
-    store.set('invoices',  invoices);
-
-    await loadTodayData();
-    store._state.lastSync = new Date().toISOString();
-    syncUI.setStatus('', 'محفوظ على السحابة ✓');
-  } catch (e) {
-    AppError.log('loadAppData', e);
-    syncUI.setStatus('error', 'خطأ في تحميل البيانات');
-  } finally {
-    store.setLoading(false);
-  }
-}
-
-async function loadTodayData() {
-  const today = store._state.currentDate;
-  const results = await Promise.allSettled([
-    API.inventory.list(),
-    API.sales.list(today),
-    API.payments.list(today)
-  ]);
-  const [inventory, sales, payments] = results.map(r =>
-    r.status === 'fulfilled' ? (r.value || []) : []
-  );
-  store.set('inventory', inventory);
-  store.set('sales',     sales);
-  store.set('payments',  payments);
-}
-
-// ─── RBAC ────────────────────────────────────────────────────
-const RBAC = {
-  can(action) {
-    const role = currentUser?.role;
-    if (!role) return true; // لو مفيش role — اسمح بكل شيء مؤقتاً
-    const permissions = {
-      owner:      ['*'],
-      admin:      ['read','write','delete','manage_employees','manage_partners'],
-      accountant: ['read','write','invoices','payments','reports'],
-      worker:     ['read','sales','inventory_add']
-    };
-    const perms = permissions[role] || ['*'];
-    return perms.includes('*') || perms.includes(action);
-  }
+  currentUser = { email: email, id: "local-user", user_metadata: { shop_name: "محلي" } };
+  localStorage.setItem('veg_user', JSON.stringify(currentUser));
+  showApp();
 };
 
-function refreshLocal(key, newData) {
-  store.set(key, newData);
-  Cache.invalidate(key);
+window.doRegister = function() {
+  const shop = document.getElementById('reg-shop').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  const pass2 = document.getElementById('reg-pass2').value;
+  if (!shop || !email || !pass) return alert("أكمل جميع البيانات");
+  if (pass !== pass2) return alert("كلمة المرور غير متطابقة");
+  currentUser = { email: email, id: "local-" + Date.now(), user_metadata: { shop_name: shop } };
+  localStorage.setItem('veg_user', JSON.stringify(currentUser));
+  showApp();
+};
+
+window.doLogout = function() {
+  currentUser = null;
+  localStorage.removeItem('veg_user');
+  showAuth();
+};
+
+// التحقق من وجود مستخدم محلي سابق
+const savedUser = localStorage.getItem('veg_user');
+if (savedUser) {
+  try { currentUser = JSON.parse(savedUser); } catch(e) {}
 }
+
+store.init();
+
+window.S = S;
+window.store = store;
+window.save = save;
+window.currentUser = currentUser;
