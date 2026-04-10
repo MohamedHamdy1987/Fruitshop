@@ -13,8 +13,20 @@
 // Helper: إضافة company_id تلقائياً لكل العمليات
 // ─────────────────────────────────────────────────────────────
 function withCompany(data) {
-  if (!currentUser?.company_id) throw new Error('لا يوجد شركة مرتبطة بالمستخدم');
-  return { ...data, company_id: currentUser.company_id };
+  const companyId = currentUser?.company_id;
+  if (!companyId) {
+    console.error('withCompany: no company_id!', currentUser);
+    throw new Error('لا يوجد شركة — تأكد من تنفيذ schema.sql في Supabase Dashboard');
+  }
+  return { ...data, company_id: companyId };
+}
+
+// Helper: تحقق من company_id قبل أي عملية
+function _requireCompany() {
+  if (!currentUser?.company_id) {
+    Toast.error('لا يوجد شركة مرتبطة — يرجى تسجيل الخروج والدخول مجدداً');
+    throw new Error('no company_id');
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -610,11 +622,11 @@ const API = {
     async getProfile() {
       const { data, error } = await sb
         .from('profiles')
-        .select(`*, company:companies(*)`)
+        .select('*, company:companies(*)')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
-      return data;
+      return data; // null لو مفيش — معالجة في loadUserProfile
     },
 
     async updateSettings(settings) {
