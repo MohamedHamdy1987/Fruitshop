@@ -85,15 +85,14 @@ const syncUI = {
 async function loadUserProfile() {
   if (!currentUser?.id) return;
   try {
-    // محاولة جلب الـ profile
+    // نجلب البيانات فقط (الـ Trigger في السوبابيس هو المسؤول عن الإنشاء)
     const { data: profile, error } = await sb
       .from('profiles')
       .select('*, company:companies(*)')
       .eq('id', currentUser.id)
-      .maybeSingle();   // maybeSingle بدل single — لا يرمي error لو فاضي
+      .maybeSingle();
 
     if (profile) {
-      // profile موجود — استخدمه
       currentUser.company_id   = profile.company_id;
       currentUser.role         = profile.role || 'owner';
       currentUser.full_name    = profile.full_name;
@@ -101,18 +100,17 @@ async function loadUserProfile() {
       currentUser.subscription = profile.company?.subscription || 'trial';
       currentUser.trial_ends   = profile.company?.trial_ends;
       currentUser.sub_ends     = profile.company?.sub_ends;
-      console.log('✅ Profile loaded:', currentUser.company_name, '| Role:', currentUser.role);
+      console.log('✅ تم تحميل بيانات الشركة:', currentUser.company_name);
     } else {
-      // لا يوجد profile — إنشاء شركة وprofile تلقائياً
-      console.warn('⚠️ No profile found — creating company automatically...');
-      await _createCompanyAndProfile();
+      // إذا لم يجد البروفايل (حدث تأخير في السيرفر مثلاً) ننتظر ثانية ونحاول مرة أخرى
+      console.warn('⏳ البروفايل غير جاهز بعد.. محاولة أخرى');
+      setTimeout(loadUserProfile, 1000);
     }
   } catch (e) {
     console.error('loadUserProfile error:', e);
-    // Fallback أخير: إنشاء شركة
-    await _createCompanyAndProfile();
   }
 }
+
 
 // ─── إنشاء شركة وprofile تلقائياً ───────────────────────────
 async function _createCompanyAndProfile() {
