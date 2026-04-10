@@ -59,11 +59,14 @@ async function doRegister() {
   btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
 
   try {
-    const { error } = await sb.auth.signUp({
-      email,
-      password: pass,
-      options: { data: { shop_name: shop } }
-    });
+    const { data, error } = await sb.auth.signUp({
+  email,
+  password: pass,
+  options: {
+    data: { shop_name: shop },
+    emailRedirectTo: window.location.origin
+  }
+});
 
     if (error) throw error;
 
