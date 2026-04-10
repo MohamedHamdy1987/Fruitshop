@@ -1,6 +1,4 @@
-// ============================================================
-// js/auth.js — المصادقة وإدارة الجلسة
-// ============================================================
+// ===================== auth.js — تسجيل الدخول والخروج والتسجيل (معدل) =====================
 
 function switchAuthTab(tab) {
   document.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
@@ -12,14 +10,21 @@ function switchAuthTab(tab) {
 
 function showAuthErr(msg) {
   const el = document.getElementById('auth-err');
-  el.textContent = msg;
-  el.classList.add('show');
+  if (el) {
+    el.textContent = msg;
+    el.classList.add('show');
+  } else {
+    alert(msg);
+  }
 }
 
 function showAuth() {
-  document.getElementById('auth-screen').style.display = 'flex';
-  document.getElementById('app').style.display         = 'none';
-  store.reset();
+  const authScreen = document.getElementById('auth-screen');
+  const appEl = document.getElementById('app');
+  if (authScreen) authScreen.style.display = 'flex';
+  if (appEl) appEl.style.display = 'none';
+  const loading = document.getElementById('loading');
+  if (loading) loading.style.display = 'none';
 }
 
 async function doLogin() {
@@ -28,21 +33,37 @@ async function doLogin() {
   if (!email || !pass) return showAuthErr('أدخل البريد وكلمة المرور');
 
   const btn = document.getElementById('login-btn');
-  btn.disabled = true; btn.textContent = 'جاري الدخول...';
+  btn.disabled    = true;
+  btn.textContent = 'جاري الدخول...';
 
   try {
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if (error) throw error;
     currentUser = data.user;
-    await loadUserProfile();
-    await showApp();
+    
+    // ✅ التأكد من وجود user_metadata.shop_name
+    if (!currentUser.user_metadata) currentUser.user_metadata = {};
+    if (!currentUser.user_metadata.shop_name) {
+      currentUser.user_metadata.shop_name = 'محل افتراضي';
+      // محاولة تحديث metadata في Supabase (قد لا تنجح إذا لم يكن المستخدم مشرفاً، لكنها لن تمنع العمل)
+      try {
+        await sb.auth.updateUser({ data: { shop_name: currentUser.user_metadata.shop_name } });
+      } catch(e) { console.warn("Could not update user metadata", e); }
+    }
+    
+    await loadUserData();
+    showApp();
+    if (typeof showToast === 'function') showToast('تم تسجيل الدخول بنجاح', 'success');
   } catch (e) {
     const isAuthErr = e?.message?.toLowerCase().includes('invalid') ||
                       e?.message?.toLowerCase().includes('credentials');
-    showAuthErr(isAuthErr ? 'بريد إلكتروني أو كلمة مرور خاطئة' : 'خطأ في الاتصال، حاول مرة أخرى');
+    showAuthErr(isAuthErr
+      ? 'بريد إلكتروني أو كلمة مرور خاطئة'
+      : 'خطأ في الاتصال، حاول مرة أخرى');
     AppError.log('doLogin', e);
   } finally {
-    btn.disabled = false; btn.textContent = '🔑 دخول';
+    btn.disabled    = false;
+    btn.textContent = '🔑 دخول';
   }
 }
 
@@ -55,35 +76,45 @@ async function doRegister() {
   if (!shop || !email || !pass) return showAuthErr('أكمل جميع البيانات');
   if (pass !== pass2)           return showAuthErr('كلمة المرور غير متطابقة');
   if (pass.length < 8)          return showAuthErr('كلمة المرور أقل من ٨ أحرف');
-  if (!email.includes('@'))     return showAuthErr('بريد إلكتروني غير صحيح');
+  if (!isValidEmail(email))     return showAuthErr('بريد إلكتروني غير صحيح');
 
   const btn = document.getElementById('reg-btn');
-  btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
+  btn.disabled    = true;
+  btn.textContent = 'جاري الإنشاء...';
 
   try {
+    const trialEnds = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await sb.auth.signUp({
       email, password: pass,
-      options: { data: { shop_name: shop } }
+      options: { data: { shop_name: shop, subscription: 'trial', trial_ends: trialEnds } }
     });
     if (error) throw error;
     currentUser = data.user;
-    // Profile يُنشأ تلقائياً بـ Trigger في قاعدة البيانات
-    await loadUserProfile();
-    await showApp();
-    Toast.success(`مرحباً بك في ${shop}! تجربة مجانية ١٤ يوم`);
+    // تأكيد وجود shop_name
+    if (!currentUser.user_metadata) currentUser.user_metadata = {};
+    currentUser.user_metadata.shop_name = shop;
+    await saveData();
+    showApp();
+    if (typeof showToast === 'function') showToast('تم إنشاء الحساب بنجاح', 'success');
   } catch (e) {
     const isExisting = e?.message?.toLowerCase().includes('already');
-    showAuthErr(isExisting ? 'هذا البريد مسجّل بالفعل' : 'حدث خطأ: ' + (e?.message || ''));
+    showAuthErr(isExisting
+      ? 'هذا البريد مسجّل بالفعل، جرّب تسجيل الدخول'
+      : 'حدث خطأ: ' + (e?.message || 'تحقق من الاتصال'));
     AppError.log('doRegister', e);
   } finally {
-    btn.disabled = false; btn.textContent = '✅ إنشاء حساب مجاني';
+    btn.disabled    = false;
+    btn.textContent = '✅ إنشاء حساب مجاني';
   }
 }
 
 async function doLogout() {
-  try { await sb.auth.signOut(); } catch(e) { AppError.log('logout', e); }
+  try {
+    await sb.auth.signOut();
+  } catch (e) {
+    AppError.log('doLogout', e);
+  }
   currentUser = null;
-  store.reset();
   closeModal('user-modal');
   showAuth();
 }
@@ -92,35 +123,18 @@ function checkTrial() {
   if (!currentUser) return;
   const banner = document.getElementById('trial-banner');
   const text   = document.getElementById('trial-text');
-  if (!banner) return;
-
-  const sub = currentUser.subscription;
-  if (sub === 'trial') {
-    const ends = new Date(currentUser.trial_ends || Date.now() + 14*86400000);
-    const days = Math.ceil((ends - Date.now()) / 86400000);
+  if (!banner || !text) return;
+  const meta   = currentUser.user_metadata;
+  if (meta?.subscription === 'trial') {
+    const ends = new Date(meta.trial_ends || Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const days = Math.ceil((ends - Date.now()) / (1000 * 60 * 60 * 24));
     if (days > 0) {
       banner.style.display = 'block';
-      text.textContent     = `تجربة مجانية — متبقي ${days} يوم`;
+      text.textContent     = `متبقي ${days} يوم من التجربة المجانية`;
     } else {
-      banner.style.display = 'block';
-      banner.style.background = 'linear-gradient(135deg,#c0392b,#e74c3c)';
-      text.textContent = 'انتهت التجربة المجانية — اشترك الآن للاستمرار';
+      banner.style.display = 'none';
     }
-  } else if (sub === 'expired') {
-    banner.style.display = 'block';
-    banner.style.background = 'linear-gradient(135deg,#c0392b,#e74c3c)';
-    text.textContent = 'انتهى اشتراكك — جدّد الآن';
   } else {
     banner.style.display = 'none';
-  }
-}
-
-function updateAdminTabVisibility() {
-  // Super Admin Tab (لوحة إدارة SaaS)
-  const adminTab = document.getElementById('adminTabBtn');
-  if (adminTab) {
-    const isSuperAdmin = currentUser?.email === 'admin@vegshop.com' ||
-                         currentUser?.role === 'owner';
-    adminTab.style.display = isSuperAdmin ? '' : 'none';
   }
 }
