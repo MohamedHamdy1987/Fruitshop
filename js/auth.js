@@ -1,5 +1,5 @@
 // ============================================================
-// js/auth.js — المصادقة (نسخة محسّنة — بدون Trigger dependency)
+// auth.js — نسخة نهائية مقاومة لكل أخطاء Supabase
 // ============================================================
 
 function switchAuthTab(tab) {
@@ -18,7 +18,7 @@ function showAuthErr(msg) {
 
 function showAuth() {
   document.getElementById('auth-screen').style.display = 'flex';
-  document.getElementById('app').style.display         = 'none';
+  document.getElementById('app').style.display = 'none';
   if (typeof store !== 'undefined') store.reset();
 }
 
@@ -33,27 +33,32 @@ async function doLogin() {
 
   try {
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-    if (error) throw error;
+
+    if (error) {
+      const m = error.message || '';
+      if (m.includes('Invalid') || m.includes('invalid') || m.includes('credentials') || m.includes('password')) {
+        showAuthErr('كلمة المرور أو البريد غير صحيح');
+      } else if (m.includes('Email not confirmed')) {
+        showAuthErr('يرجى تأكيد بريدك الإلكتروني أولاً — تحقق من inbox أو spam');
+      } else {
+        showAuthErr('خطأ: ' + m);
+      }
+      return;
+    }
 
     currentUser = data.user;
     await loadUserProfile();
     await showApp();
+
   } catch (e) {
-    const msg = e?.message || '';
-    if (msg.includes('Invalid') || msg.includes('invalid') || msg.includes('credentials') || msg.includes('password')) {
-      showAuthErr('كلمة المرور أو البريد الإلكتروني غير صحيح');
-    } else if (msg.includes('Email not confirmed')) {
-      showAuthErr('يرجى تأكيد بريدك الإلكتروني أولاً');
-    } else {
-      showAuthErr('خطأ في الاتصال — تحقق من الإنترنت وحاول مجدداً');
-    }
-    console.error('doLogin error:', e);
+    showAuthErr('خطأ في الاتصال — تحقق من الإنترنت');
+    console.error('doLogin:', e);
   } finally {
     btn.disabled = false; btn.textContent = '🔑 دخول';
   }
 }
 
-// ─── إنشاء حساب جديد (بدون Trigger — كل شيء يدوياً) ─────────
+// ─── إنشاء حساب جديد ─────────────────────────────────────────
 async function doRegister() {
   const shop  = document.getElementById('reg-shop').value.trim();
   const email = document.getElementById('reg-email').value.trim();
@@ -64,139 +69,132 @@ async function doRegister() {
   if (!email)          return showAuthErr('أدخل البريد الإلكتروني');
   if (!pass)           return showAuthErr('أدخل كلمة المرور');
   if (pass !== pass2)  return showAuthErr('كلمة المرور غير متطابقة');
-  if (pass.length < 6) return showAuthErr('كلمة المرور أقل من 6 أحرف');
+  if (pass.length < 6) return showAuthErr('كلمة المرور 6 أحرف على الأقل');
 
   const btn = document.getElementById('reg-btn');
   btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
 
   try {
-    // ── الخطوة 1: تسجيل المستخدم في Supabase Auth فقط ──────
-    // بدون options.data لتجنب أي trigger يفشل
-    const { data, error: signupErr } = await sb.auth.signUp({
-      email,
-      password: pass
-    });
+    // المحاولة الأولى: signUp عادي
+    const { data, error } = await sb.auth.signUp({ email, password: pass });
 
-    if (signupErr) {
-      // معالجة أخطاء التسجيل المحددة
-      const msg = signupErr.message || '';
-      if (msg.includes('already') || msg.includes('registered')) {
-        showAuthErr('هذا البريد مسجّل بالفعل — جرّب تسجيل الدخول');
-      } else if (msg.includes('Database error')) {
-        // الـ Trigger فاشل — نتجاهله ونكمل يدوياً
-        console.warn('Trigger failed, continuing manually...');
-        // محاولة تسجيل دخول مباشر (المستخدم ربما اتسجل فعلاً)
-        const { data: loginData, error: loginErr } = await sb.auth.signInWithPassword({ email, password: pass });
-        if (!loginErr && loginData?.user) {
-          currentUser = loginData.user;
-          await _setupUserData(currentUser, shop);
-          await showApp();
-          Toast.success(`مرحباً! تم إنشاء الحساب`);
-          return;
-        }
-        showAuthErr('حدث خطأ في قاعدة البيانات — يرجى تنفيذ QUICK_START.sql في Supabase أولاً');
-      } else {
-        showAuthErr('حدث خطأ: ' + msg);
-      }
+    const errMsg = error?.message || '';
+    const isDbError = errMsg.includes('Database error') || errMsg.includes('database');
+    const isExisting = errMsg.includes('already') || errMsg.includes('registered') ||
+                       errMsg.includes('User already');
+
+    if (isExisting) {
+      // المستخدم موجود — محاولة تسجيل دخول مباشرة
+      showAuthErr('هذا البريد مسجّل — جاري تسجيل الدخول تلقائياً...');
+      const { data: ld, error: le } = await sb.auth.signInWithPassword({ email, password: pass });
+      if (le) { showAuthErr('البريد مسجّل بكلمة مرور مختلفة'); return; }
+      currentUser = ld.user;
+      await _setupUserData(currentUser, shop);
+      await showApp();
       return;
     }
 
-    // ── الخطوة 2: إعداد بيانات المستخدم يدوياً ──────────────
+    if (isDbError) {
+      // الـ Trigger فشل لكن المستخدم ربما اتسجّل فعلاً
+      // ننتظر ثانية ثم نحاول الدخول
+      await new Promise(r => setTimeout(r, 1500));
+      const { data: ld, error: le } = await sb.auth.signInWithPassword({ email, password: pass });
+      if (!le && ld?.user) {
+        currentUser = ld.user;
+        await _setupUserData(currentUser, shop);
+        await showApp();
+        return;
+      }
+      // المستخدم مش موجود — الـ Trigger فشل قبل إنشاءه
+      showAuthErr('خطأ في قاعدة البيانات. تأكد من تنفيذ FIX.sql في Supabase ثم حاول مجدداً');
+      return;
+    }
+
+    if (error) {
+      showAuthErr('خطأ: ' + errMsg);
+      return;
+    }
+
+    // نجح التسجيل
     if (data?.user) {
       currentUser = data.user;
       await _setupUserData(currentUser, shop);
       await showApp();
-      Toast.success(`مرحباً بك في ${shop}!`);
+      Toast.success('مرحباً بك! تجربة مجانية ١٤ يوم');
     } else {
-      // Supabase أرسل confirmation email — المستخدم محتاج يأكد
-      showAuthErr('تم إرسال رسالة تأكيد لبريدك — تحقق منه ثم ادخل');
+      // Supabase أرسل email تأكيد
+      showAuthErr('تم إرسال رسالة تأكيد لبريدك — افتح الرسالة واضغط الرابط ثم ادخل');
     }
 
   } catch (e) {
-    console.error('doRegister error:', e);
-    showAuthErr('حدث خطأ غير متوقع: ' + (e?.message || ''));
+    console.error('doRegister:', e);
+    showAuthErr('خطأ غير متوقع: ' + (e?.message || e));
   } finally {
     btn.disabled = false; btn.textContent = '✅ إنشاء حساب';
   }
 }
 
-// ─── إعداد بيانات المستخدم في الجداول (بدون Trigger) ──────────
+// ─── إعداد بيانات المستخدم (شركة + profile) ──────────────────
 async function _setupUserData(user, shopName) {
+  const displayName = shopName || user.user_metadata?.shop_name ||
+                      user.email?.split('@')[0] || 'محل';
   try {
-    const displayName = shopName || user.email?.split('@')[0] || 'محل';
-
-    // 1. هل عنده شركة بالفعل؟
-    const { data: existingCompany } = await sb
-      .from('companies')
+    // هل عنده شركة؟
+    const { data: co } = await sb.from('companies')
       .select('id, name, subscription, trial_ends')
       .eq('owner_id', user.id)
       .maybeSingle();
 
     let companyId;
 
-    if (existingCompany) {
-      companyId = existingCompany.id;
+    if (co) {
+      companyId = co.id;
       currentUser.company_id   = companyId;
-      currentUser.company_name = existingCompany.name;
-      currentUser.subscription = existingCompany.subscription || 'trial';
-      currentUser.trial_ends   = existingCompany.trial_ends;
+      currentUser.company_name = co.name;
+      currentUser.subscription = co.subscription || 'trial';
+      currentUser.trial_ends   = co.trial_ends;
     } else {
-      // 2. إنشاء شركة جديدة
-      const { data: newCompany, error: companyErr } = await sb
-        .from('companies')
-        .insert({
-          name:         displayName,
-          owner_id:     user.id,
-          subscription: 'trial',
-          trial_ends:   new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-        })
-        .select()
-        .single();
+      const { data: newCo, error: ce } = await sb.from('companies').insert({
+        name:         displayName,
+        owner_id:     user.id,
+        subscription: 'trial',
+        trial_ends:   new Date(Date.now() + 14*864e5).toISOString()
+      }).select().single();
 
-      if (companyErr) {
-        console.error('Cannot create company:', companyErr);
-        // استخدام user.id مؤقتاً
+      if (ce) {
+        console.error('companies insert error:', ce.message);
+        // Fallback: استخدم user.id مؤقتاً
         currentUser.company_id   = user.id;
         currentUser.company_name = displayName;
         currentUser.subscription = 'trial';
         currentUser.role         = 'owner';
+        currentUser.full_name    = displayName;
         return;
       }
-
-      companyId = newCompany.id;
+      companyId = newCo.id;
       currentUser.company_id   = companyId;
       currentUser.company_name = displayName;
       currentUser.subscription = 'trial';
-      currentUser.trial_ends   = newCompany.trial_ends;
+      currentUser.trial_ends   = newCo.trial_ends;
     }
 
-    // 3. إنشاء أو تحديث الـ profile
-    const { error: profileErr } = await sb
-      .from('profiles')
-      .upsert({
-        id:         user.id,
-        company_id: companyId,
-        full_name:  displayName,
-        role:       'owner',
-        is_active:  true
-      }, { onConflict: 'id' });
-
-    if (profileErr) {
-      console.error('Cannot create profile:', profileErr);
-    }
+    // Profile
+    await sb.from('profiles').upsert({
+      id: user.id, company_id: companyId,
+      full_name: displayName, role: 'owner', is_active: true
+    }, { onConflict: 'id' });
 
     currentUser.role      = 'owner';
     currentUser.full_name = displayName;
-
-    console.log('✅ User setup complete:', displayName, companyId);
+    console.log('✅ Setup done:', displayName, companyId);
 
   } catch (e) {
-    console.error('_setupUserData error:', e);
-    // Fallback: استخدم user.id كـ company_id
+    console.error('_setupUserData:', e);
     currentUser.company_id   = user.id;
-    currentUser.company_name = shopName || 'محلي';
+    currentUser.company_name = displayName;
     currentUser.role         = 'owner';
     currentUser.subscription = 'trial';
+    currentUser.full_name    = displayName;
   }
 }
 
@@ -215,31 +213,18 @@ function checkTrial() {
   const banner = document.getElementById('trial-banner');
   const text   = document.getElementById('trial-text');
   if (!banner || !text) return;
-
   const sub  = currentUser.subscription || 'trial';
+  if (sub === 'monthly' || sub === 'yearly') { banner.style.display = 'none'; return; }
   const ends = currentUser.trial_ends || currentUser.sub_ends;
-
-  if (sub === 'monthly' || sub === 'yearly') {
-    banner.style.display = 'none';
-    return;
-  }
-
-  if (sub === 'trial') {
-    const days = ends ? Math.ceil((new Date(ends) - Date.now()) / 86400000) : 14;
-    banner.style.display    = 'block';
-    banner.style.background = 'linear-gradient(135deg,#f39c12,#e67e22)';
-    text.textContent = days > 0
-      ? `تجربة مجانية — متبقي ${days} يوم`
-      : 'انتهت التجربة — اشترك الآن';
-  } else {
-    banner.style.display    = 'block';
-    banner.style.background = 'linear-gradient(135deg,#c0392b,#e74c3c)';
-    text.textContent        = 'انتهى اشتراكك — جدّد الآن';
-  }
+  const days = ends ? Math.ceil((new Date(ends) - Date.now()) / 864e5) : 14;
+  banner.style.display    = 'block';
+  banner.style.background = days > 0
+    ? 'linear-gradient(135deg,#f39c12,#e67e22)'
+    : 'linear-gradient(135deg,#c0392b,#e74c3c)';
+  text.textContent = days > 0 ? `تجربة مجانية — متبقي ${days} يوم` : 'انتهت التجربة — اشترك الآن';
 }
 
 function updateAdminTabVisibility() {
-  const adminTab = document.getElementById('adminTabBtn');
-  if (!adminTab) return;
-  adminTab.style.display = (currentUser?.role === 'owner' || currentUser?.role === 'admin') ? '' : 'none';
+  const t = document.getElementById('adminTabBtn');
+  if (t) t.style.display = (currentUser?.role === 'owner' || currentUser?.role === 'admin') ? '' : 'none';
 }
