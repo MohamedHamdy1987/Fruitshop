@@ -1,5 +1,5 @@
 // ============================================================
-// auth.js — نسخة نهائية مقاومة لكل أخطاء Supabase
+// auth.js — نسخة نهائية (تم تصحيح sb)
 // ============================================================
 
 function switchAuthTab(tab) {
@@ -32,6 +32,7 @@ async function doLogin() {
   btn.disabled = true; btn.textContent = 'جاري الدخول...';
 
   try {
+    // ✅ التصحيح: استخدم sb بدلاً من ksb
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
 
     if (error) {
@@ -75,7 +76,7 @@ async function doRegister() {
   btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
 
   try {
-    // المحاولة الأولى: signUp عادي
+    // ✅ استخدم sb بدلاً من ksb
     const { data, error } = await sb.auth.signUp({ email, password: pass });
 
     const errMsg = error?.message || '';
@@ -84,7 +85,6 @@ async function doRegister() {
                        errMsg.includes('User already');
 
     if (isExisting) {
-      // المستخدم موجود — محاولة تسجيل دخول مباشرة
       showAuthErr('هذا البريد مسجّل — جاري تسجيل الدخول تلقائياً...');
       const { data: ld, error: le } = await sb.auth.signInWithPassword({ email, password: pass });
       if (le) { showAuthErr('البريد مسجّل بكلمة مرور مختلفة'); return; }
@@ -95,8 +95,6 @@ async function doRegister() {
     }
 
     if (isDbError) {
-      // الـ Trigger فشل لكن المستخدم ربما اتسجّل فعلاً
-      // ننتظر ثانية ثم نحاول الدخول
       await new Promise(r => setTimeout(r, 1500));
       const { data: ld, error: le } = await sb.auth.signInWithPassword({ email, password: pass });
       if (!le && ld?.user) {
@@ -105,8 +103,7 @@ async function doRegister() {
         await showApp();
         return;
       }
-      // المستخدم مش موجود — الـ Trigger فشل قبل إنشاءه
-      showAuthErr('خطأ في قاعدة البيانات. تأكد من تنفيذ FIX.sql في Supabase ثم حاول مجدداً');
+      showAuthErr('خطأ في قاعدة البيانات. تأكد من تنفيذ QUICK_START.sql في Supabase ثم حاول مجدداً');
       return;
     }
 
@@ -115,14 +112,12 @@ async function doRegister() {
       return;
     }
 
-    // نجح التسجيل
     if (data?.user) {
       currentUser = data.user;
       await _setupUserData(currentUser, shop);
       await showApp();
       Toast.success('مرحباً بك! تجربة مجانية ١٤ يوم');
     } else {
-      // Supabase أرسل email تأكيد
       showAuthErr('تم إرسال رسالة تأكيد لبريدك — افتح الرسالة واضغط الرابط ثم ادخل');
     }
 
@@ -139,7 +134,6 @@ async function _setupUserData(user, shopName) {
   const displayName = shopName || user.user_metadata?.shop_name ||
                       user.email?.split('@')[0] || 'محل';
   try {
-    // هل عنده شركة؟
     const { data: co } = await sb.from('companies')
       .select('id, name, subscription, trial_ends')
       .eq('owner_id', user.id)
@@ -163,7 +157,6 @@ async function _setupUserData(user, shopName) {
 
       if (ce) {
         console.error('companies insert error:', ce.message);
-        // Fallback: استخدم user.id مؤقتاً
         currentUser.company_id   = user.id;
         currentUser.company_name = displayName;
         currentUser.subscription = 'trial';
@@ -178,7 +171,6 @@ async function _setupUserData(user, shopName) {
       currentUser.trial_ends   = newCo.trial_ends;
     }
 
-    // Profile
     await sb.from('profiles').upsert({
       id: user.id, company_id: companyId,
       full_name: displayName, role: 'owner', is_active: true
