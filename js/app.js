@@ -42,6 +42,29 @@ const PAGE_RENDERS = {
 };
 
 let _activePage = 'dashboard';
+// داخل app.js — استبدل كائن PAGE_RENDERS بهذا:
+const PAGE_RENDERS = {
+  dashboard:    () => safeRender('dashboard',    renderDashboard),
+  baqi:         () => safeRender('baqi',         renderBaqi),
+  nazil:        () => { refreshDropdowns(); safeRender('nazil', renderNazilList); },
+  sales:        () => { refreshDropdowns(); safeRender('sales', renderSalesTable); },
+  tarhil:       () => safeRender('tarhil',       renderTarhil),
+  customers:    () => safeRender('customers',    renderCustList),
+  suppliers:    () => safeRender('suppliers',    renderSuppList),
+  invoices:     () => { refreshDropdowns(); safeRender('invoices', renderInvoicesPage); },
+  employees:    () => safeRender('employees',    renderEmployees),
+  partners:     () => safeRender('partners',     renderPartners),
+  shops:        () => safeRender('shops',        renderShops),
+  khazna:       () => { refreshDropdowns(); safeRender('khazna-col', renderCollections);
+                         safeRender('khazna-exp', renderExpenses);
+                         safeRender('khazna-sum', renderDaySummary); },
+  subscription: () => safeRender('subscription', renderSubscriptionStatus),
+  admin:        () => safeRender('admin',        loadAdminPayments)
+  // تم إزالة inventory
+};
+
+// تأكد من وجود دالة goToTarhilDate في النطاق العام (يمكن وضعها في utils.js)
+window.goToTarhilDate = goToTarhilDate;
 
 function safeRender(name, fn) {
   try { fn(); } catch (e) { AppError.log(`render:${name}`, e); }
