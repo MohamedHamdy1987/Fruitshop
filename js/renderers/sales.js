@@ -339,6 +339,33 @@ async function deleteBatchFromSales(batchId) {
     Toast.success('تم حذف الدفعة');
   } catch(e) { AppError.log('deleteBatchFromSales', e, true); }
 }
+// ─────────────────────────────────────────────────────────────
+// goToProduct — الانتقال للمبيعات وفتح دفعة محددة
+// ─────────────────────────────────────────────────────────────
+function goToProduct(batchId) {
+  if (!batchId) {
+    Toast.warning('لا يوجد رقم دفعة صالح');
+    return;
+  }
+  
+  // التأكد من وجود الدفعة في المخزون
+  const batch = (store.inv || []).find(b => b.batch_id === batchId);
+  if (!batch) {
+    Toast.error('الدفعة غير موجودة في المخزون');
+    return;
+  }
+  
+  // تعيين الدفعة النشطة
+  _activeBatchId = batchId;
+  
+  // الانتقال لصفحة المبيعات
+  showPage('sales', document.querySelector('[data-page="sales"]'));
+  
+  // فتح تفاصيل الدفعة تلقائياً بعد render
+  setTimeout(() => {
+    toggleBatch(batchId);
+  }, 100);
+}
 
 // ─────────────────────────────────────────────────────────────
 // closeDay — إغلاق اليوم وترحيل المتبقيات
