@@ -1,111 +1,286 @@
 // ============================================================
-// renderers/invoices.js — نظام فواتير الموردين (نسخة القديم)
+// js/renderers/inventory.js — المخزون الكامل
+// يجمع "النازل" (incoming_batches جديدة) و"الباقي" (carryover_from != null)
+// يحل محل baqi.js و nazil.js القديمين بالكامل
 // ============================================================
 
-async function renderInvoicesPage() {
-  const container = document.getElementById('invoices-cont');
+// ─────────────────────────────────────────────────────────────
+// renderInventory — نقطة الدخول الرئيسية
+// ─────────────────────────────────────────────────────────────
+async function renderInventory() {
+  const container = document.getElementById('inventory-content');
   if (!container) return;
-  const invs = store.invs || [];
-  if (!invs.length) {
-    container.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">🧾</div>
-      <div class="empty-title">لا توجد فواتير</div>
-      <div class="empty-sub">ستُنشأ الفواتير تلقائياً عند اكتمال بيع دفعة مورد</div>
-    </div>`;
-    return;
-  }
-  container.innerHTML = invs.map(inv => renderInvoiceCard(inv)).join('');
-}
 
-function renderInvoiceCard(inv) {
-  const gross  = inv.subtotal || 0;
-  const cm     = inv.commission_7pct || 0;
-  const noulon = inv.noulon_total || 0;
-  const mashal = inv.mashal_total || 0;
-  const total  = inv.total_amount || (gross - cm - noulon - mashal);
-  const supplier = store.supps?.find(s => s.id === inv.supplier_id) || { name: inv.supplierName || '-' };
-  const items = inv.items || [];
+  const inv      = store.inv || [];
+  const active   = inv.filter(b => (b.status === 'active' || !b.status));
+  const nazil    = active.filter(b => !b.carryover_from);   // اليوم الجديد
+  const baqi     = active.filter(b => !!b.carryover_from);  // مرحّل من يوم سابق
+  const lowStock = active.filter(b => b.is_low_stock);
 
-  return `<div class="card" id="inv-${inv.id}">
-    <div class="ch g" style="justify-content:space-between">
-      <div>
-        <h2>🧾 فاتورة: ${supplier.name}</h2>
-        <div style="font-size:0.76rem;color:var(--gray)">${inv.invoice_date || inv.date || '-'}</div>
-      </div>
-      <div class="no-print">
-        <button class="btn btn-b btn-sm" onclick="printInvoice('${inv.id}')">🖨️</button>
-        <button class="btn btn-r btn-sm" onclick="delInvoice('${inv.id}')">🗑️</button>
-      </div>
+  container.innerHTML = `
+
+  <!-- ═══ إضافة صنف نازل ══════════════════════════════════ -->
+  <div class="card">
+    <div class="ch" style="background:#e8f8f5;border-bottom-color:#a2d9ce;">
+      <span>➕</span><h2 style="color:#0e6655">إضافة صنف نازل</h2>
     </div>
     <div class="cb">
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
-          <thead><tr style="background:#f0f7f0"><th>الصنف</th><th>الوحدة</th><th>المباع</th><th>الوزن</th><th>الإجمالي</th></tr></thead>
-          <tbody>
-            ${items.map(item => `
-              <tr>
-                <td style="padding:5px;font-weight:700">${item.product?.name || '-'}</td>
-                <td style="padding:5px">${item.product?.unit || '-'}</td>
-                <td style="padding:5px">${N(item.quantity || 0)}</td>
-                <td style="padding:5px">${item.weight_kg > 0 ? N(item.weight_kg)+' ك' : '-'}</td>
-                <td style="padding:5px;font-weight:900;color:var(--green)">${N(item.total)} جنيه</td>
-              </tr>
-            `).join('')}
-          </tbody>
-          <tfoot><tr style="background:#eafaf1;font-weight:900"><td colspan="4">إجمالي المبيعات</td><td>${N(gross)} جنيه</td></tr></tfoot>
-        </table>
-      </div>
-      <div style="background:#fef9e7;border:1.5px solid #f0d080;border-radius:9px;padding:11px;margin-top:10px">
-        <div style="font-weight:800;color:#7a5c00;margin-bottom:8px">✂️ الخصومات</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:7px">
-          <div><label style="font-size:0.75rem;font-weight:700">النولون</label><input type="number" value="${noulon}" min="0" onchange="updateInvDed('${inv.id}','noulon_total',this.value)"></div>
-          <div><label style="font-size:0.75rem;font-weight:700">المشال</label><input type="number" value="${mashal}" min="0" onchange="updateInvDed('${inv.id}','mashal_total',this.value)"></div>
-          <div><label style="font-size:0.75rem;font-weight:700">العمولة (7%)</label><input type="number" value="${cm}" min="0" onchange="updateInvDed('${inv.id}','commission_7pct',this.value)"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px">
+        <div>
+          <label class="lbl">الصنف</label>
+          <select id="inv-product-sel" style="width:100%">
+            <option value="">-- اختر --</option>
+            ${(store.prods||[]).map(p=>`<option value="${p.id}">${p.name} (${p.unit})</option>`).join('')}
+          </select>
         </div>
-        <div style="margin-top:8px"><strong>الصافي المستحق للمورد: <span id="net-${inv.id}">${N(total)}</span> جنيه</strong></div>
+        <div>
+          <label class="lbl">المورد</label>
+          <select id="inv-supplier-sel" style="width:100%">
+            <option value="">-- اختر --</option>
+            ${(store.supps||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="lbl">الكمية</label>
+          <input type="number" id="inv-qty" placeholder="0" min="0.01" step="0.01">
+        </div>
+        <div>
+          <label class="lbl">سعر الشراء</label>
+          <input type="number" id="inv-buyprice" placeholder="0" min="0">
+        </div>
+        <div>
+          <label class="lbl">النولون</label>
+          <input type="number" id="inv-noulon" placeholder="0" min="0">
+        </div>
+        <div>
+          <label class="lbl">المشال</label>
+          <input type="number" id="inv-mashal" placeholder="0" min="0">
+        </div>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g" onclick="addInventoryBatch()">➕ إضافة صنف</button>
+        <button class="btn btn-b btn-sm" onclick="showAddProductModal()">📦 منتج جديد</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ تنبيه مخزون منخفض ═══════════════════════════════ -->
+  ${lowStock.length ? `
+  <div class="card" style="border:2px solid #ff9800">
+    <div class="ch" style="background:#fff3e0;border-bottom-color:#ffe082">
+      <span>⚠️</span><h2 style="color:#e65100">مخزون منخفض (${lowStock.length} صنف)</h2>
+    </div>
+    <div class="cb">
+      ${lowStock.map(b=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;
+        padding:7px 0;border-bottom:1px solid #ffe082">
+        <div>
+          <strong>${b.product_name}</strong>
+          <span style="font-size:.74rem;color:var(--gray);margin-right:8px">من: ${b.supplier_name}</span>
+        </div>
+        <span class="low-stock-badge">⚠️ ${N(b.remaining_qty)} ${b.unit}</span>
+      </div>`).join('')}
+    </div>
+  </div>` : ''}
+
+  <!-- ═══ الأصناف النازلة (اليوم) ═════════════════════════ -->
+  <div class="card">
+    <div class="ch" style="background:#e8f8f5;border-bottom-color:#a2d9ce;">
+      <span>📋</span>
+      <h2 style="color:#0e6655">الأصناف النازلة</h2>
+      <span class="cbadge" style="background:#0e6655">${nazil.length} صنف</span>
+    </div>
+    <div class="cb" id="nazil-list">
+      ${nazil.length ? _renderBatchCards(nazil, 'nazil') : _emptyState('النازل', 'لا توجد أصناف نازلة اليوم')}
+    </div>
+  </div>
+
+  <!-- ═══ الباقي (مرحّل من الأيام السابقة) ════════════════ -->
+  <div class="card">
+    <div class="ch" style="background:#f3e5f5;border-bottom-color:#ce93d8;">
+      <span>🔄</span>
+      <h2 style="color:#6c3483">الباقي في المحل</h2>
+      <span class="cbadge" style="background:#6c3483">${baqi.length} صنف</span>
+    </div>
+    <div class="cb" id="baqi-body">
+      ${baqi.length ? _renderBatchCards(baqi, 'baqi') : _emptyState('الباقي', 'لا توجد متبقيات من الأيام السابقة')}
     </div>
   </div>`;
 }
 
-async function updateInvDed(invId, field, val) {
-  const inv = store.invs.find(i => i.id === invId);
-  if (!inv) return;
-  inv[field] = parseFloat(val) || 0;
-  const gross = inv.subtotal || 0;
-  const total = gross - (inv.commission_7pct||0) - (inv.noulon_total||0) - (inv.mashal_total||0);
-  inv.total_amount = total;
-  document.getElementById(`net-${invId}`).innerText = N(total);
+// ─────────────────────────────────────────────────────────────
+// _renderBatchCards — بطاقات الدفعات
+// ─────────────────────────────────────────────────────────────
+function _renderBatchCards(batches, section) {
+  return batches.map((b, i) => {
+    const remQty  = parseFloat(b.remaining_qty || 0);
+    const origQty = parseFloat(b.original_qty  || b.quantity || remQty);
+    const pct     = origQty > 0 ? Math.round((remQty / origQty) * 100) : 0;
+    const barClr  = pct > 50 ? 'var(--green)' : pct > 20 ? 'var(--orange)' : 'var(--red)';
+    const date    = new Date(b.batch_date).toLocaleDateString('ar-EG',{month:'short',day:'numeric'});
+    const isCarry = !!b.carryover_from;
+    const bgClr   = section === 'baqi' ? '#f9f0ff' : '#f0faf5';
+    const brdClr  = section === 'baqi' ? '#d2b4de'  : 'var(--border)';
+    const hdrBg   = section === 'baqi' ? '#f3e5f5'  : '#e8f8f5';
+    const txtClr  = section === 'baqi' ? '#6c3483'  : '#0e6655';
+
+    return `
+    <div style="background:${bgClr};border:1.5px solid ${brdClr};border-radius:10px;
+      margin-bottom:9px;overflow:hidden;">
+      <!-- رأس البطاقة -->
+      <div style="padding:10px 13px;background:${hdrBg};
+        display:flex;align-items:center;justify-content:space-between;
+        cursor:pointer;" onclick="goToProduct('${b.batch_id}')">
+        <div style="display:flex;align-items:center;gap:9px">
+          <div style="background:${txtClr};color:#fff;border-radius:50%;
+            width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+            font-size:.78rem;font-weight:900">${i + 1}</div>
+          <div>
+            <div style="font-weight:800;color:${txtClr};font-size:.93rem">${b.product_name}</div>
+            <div style="font-size:.72rem;color:var(--gray)">
+              ${b.supplier_name} · ${date}
+              ${isCarry ? `<span style="background:#e3f2fd;color:var(--blue);border-radius:4px;
+                padding:1px 5px;font-size:.66rem;margin-right:4px">مرحّل</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="text-align:left">
+            <div style="font-weight:900;color:${txtClr};font-size:1rem">${N(remQty)} ${b.unit}</div>
+            <div style="font-size:.7rem;color:var(--gray)">من أصل ${N(origQty)}</div>
+          </div>
+          <button class="btn btn-r btn-xs" style="z-index:1"
+            onclick="event.stopPropagation();deleteInventoryBatch('${b.batch_id}')">🗑️</button>
+        </div>
+      </div>
+
+      <!-- شريط الكمية -->
+      <div style="padding:8px 13px">
+        <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--gray);margin-bottom:4px">
+          <span>تكلفة الوحدة: ${N(b.cost_per_unit || 0)} ج/${b.unit}</span>
+          <span>متبقي: ${pct}%</span>
+        </div>
+        <div style="background:#e8e8e8;border-radius:4px;height:7px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${barClr};border-radius:4px;transition:width .4s"></div>
+        </div>
+        <!-- زر البيع السريع -->
+        <div style="margin-top:8px">
+          <button class="btn btn-g btn-sm"
+            onclick="goToProduct('${b.batch_id}')">
+            🛒 بيع من هذا الصنف
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _emptyState(type, msg) {
+  return `<p style="text-align:center;color:#aaa;padding:18px">${msg}</p>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// addInventoryBatch — إضافة دفعة جديدة
+// ─────────────────────────────────────────────────────────────
+async function addInventoryBatch() {
+  const productId  = document.getElementById('inv-product-sel')?.value;
+  const supplierId = document.getElementById('inv-supplier-sel')?.value;
+  const qty        = parseFloat(document.getElementById('inv-qty')?.value) || 0;
+  const buyPrice   = parseFloat(document.getElementById('inv-buyprice')?.value) || 0;
+  const noulon     = parseFloat(document.getElementById('inv-noulon')?.value)   || 0;
+  const mashal     = parseFloat(document.getElementById('inv-mashal')?.value)   || 0;
+
+  if (!productId)  return Toast.warning('اختر الصنف');
+  if (!supplierId) return Toast.warning('اختر المورد');
+  if (qty <= 0)    return Toast.warning('أدخل الكمية');
+
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'جاري الإضافة...';
+
   try {
-    await API.invoices.updateDeductions(invId, {
-      subtotal: gross,
-      commission: inv.commission_7pct,
-      noulon: inv.noulon_total,
-      mashal: inv.mashal_total,
-      discount: 0
+    await API.inventory.add({
+      productId, supplierId, quantity: qty,
+      buyPrice, noulon, mashal,
+      date: store._state.currentDate
     });
-  } catch(e) { AppError.log('updateInvDed', e); }
+
+    // تحديث المخزون فوراً
+    const updated = await API.inventory.list();
+    store.set('inventory', updated);
+    Cache.invalidate('inventory');
+
+    // مسح الحقول
+    ['inv-qty','inv-buyprice','inv-noulon','inv-mashal'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+
+    const prodName = (store.prods||[]).find(p=>p.id===productId)?.name || '';
+    Toast.success(`✅ تم إضافة ${qty} ${prodName}`);
+    renderInventory();
+
+    // تحديث صفحة المبيعات لو مفتوحة
+    if (typeof renderSalesTable === 'function') renderSalesTable();
+
+  } catch(e) { AppError.log('addInventoryBatch', e, true); }
+  finally { btn.disabled = false; btn.textContent = '➕ إضافة صنف'; }
 }
 
-async function delInvoice(id) {
-  if (!confirm('حذف هذه الفاتورة؟')) return;
+// ─────────────────────────────────────────────────────────────
+// deleteInventoryBatch — حذف دفعة
+// ─────────────────────────────────────────────────────────────
+async function deleteInventoryBatch(batchId) {
+  if (!confirm('حذف هذه الدفعة من المخزون؟')) return;
   try {
-    await API.invoices.delete(id);
-    store.set('invoices', store.invs.filter(i => i.id !== id));
+    await sb.from('incoming_batches')
+      .delete()
+      .eq('id', batchId)
+      .eq('company_id', currentUser.company_id);
+    const updated = await API.inventory.list();
+    store.set('inventory', updated);
     Toast.success('تم الحذف');
-    renderInvoicesPage();
-  } catch(e) { AppError.log('delInvoice', e, true); }
+    renderInventory();
+  } catch(e) { AppError.log('deleteInventoryBatch', e, true); }
 }
 
-function printInvoice(invId) {
-  const card = document.getElementById(`inv-${invId}`);
-  if (!card) return;
-  const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet"><style>body{font-family:Cairo,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f0f7f0}</style></head><body>${card.outerHTML}</body></html>`);
-  w.document.close();
-  w.print();
+// ─────────────────────────────────────────────────────────────
+// showAddProductModal / saveNewProduct — إضافة منتج جديد
+// ─────────────────────────────────────────────────────────────
+function showAddProductModal() {
+  const modal = document.getElementById('add-product-modal');
+  if (modal) modal.classList.add('open');
 }
 
-// للتوافق مع الأزرار القديمة
-function generateInvoice() { Toast.info('تُنشأ الفواتير تلقائياً عند اكتمال بيع الدفعة'); }
-function generateInvoiceFor() { generateInvoice(); }
+async function saveNewProduct() {
+  const name      = document.getElementById('pm-name')?.value.trim();
+  const unit      = document.getElementById('pm-unit')?.value;
+  const category  = document.getElementById('pm-category')?.value;
+  const buyPrice  = parseFloat(document.getElementById('pm-buyprice')?.value)  || 0;
+  const sellPrice = parseFloat(document.getElementById('pm-sellprice')?.value) || 0;
+  const lowAlert  = parseFloat(document.getElementById('pm-lowalert')?.value)  || 5;
+
+  if (!name) return Toast.warning('أدخل اسم المنتج');
+
+  try {
+    await API.products.add({ name, unit, category, buyPrice, sellPrice, lowStockAlert: lowAlert });
+    const updated = await API.products.list();
+    store.set('products', updated);
+    closeModal('add-product-modal');
+    ['pm-name','pm-buyprice','pm-sellprice','pm-lowalert'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    Toast.success(`✅ تم إضافة المنتج: ${name}`);
+    renderInventory();
+  } catch(e) { AppError.log('saveNewProduct', e, true); }
+}
+
+// ─────────────────────────────────────────────────────────────
+// للتوافق مع الكود القديم
+// ─────────────────────────────────────────────────────────────
+function renderBaqi()      { renderInventory(); }
+function renderNazilList() { renderInventory(); }
+
+// فتح البيع من بطاقة مخزون (legacy compat)
+function openSaleFromInventory(batchId, productId, productName, unit, maxQty) {
+  goToProduct(batchId);
+}
