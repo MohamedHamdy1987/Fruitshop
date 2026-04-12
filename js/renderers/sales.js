@@ -1,185 +1,305 @@
 // ============================================================
-// renderers/sales.js — نظام المبيعات (نسخة القديم)
+// js/renderers/sales.js — صفحة المبيعات
+// workflow السوق الحقيقي: عرض الدفعات + بيع مباشر من كل دفعة
+// يعتمد على: incoming_batches (store.inv) + daily_sales (API)
+// لا يستخدم S.products أو S.tarhilLog
 // ============================================================
 
-let xProd = null;  // المنتج المفتوح حالياً
+// ─────────────────────────────────────────────────────────────
+// حالة الصفحة المحلية (UI فقط — لا بيانات عمل)
+// ─────────────────────────────────────────────────────────────
+let _activeBatchId = null;   // الدفعة المفتوحة حالياً
 
+// ─────────────────────────────────────────────────────────────
+// renderSalesTable — نقطة الدخول الرئيسية
+// ─────────────────────────────────────────────────────────────
 async function renderSalesTable() {
   const tbody = document.getElementById('sales-tbody');
   if (!tbody) return;
-  const batches = store.inv || [];
-  if (!batches.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#aaa;padding:22px">لا توجد أصناف</td></tr>';
-    updateDayTotal();
+
+  const inv   = (store.inv || []).filter(b => parseFloat(b.remaining_qty) > 0 || _hasSalesToday(b.batch_id));
+  const sales = store.sales || [];
+
+  if (!inv.length && !sales.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="color:#aaa;padding:22px;text-align:center">
+      لا توجد بضاعة — أضف دفعة من تبويب المخزون
+    </td></tr>`;
+    _updateDayTotal(sales);
     return;
   }
 
   let html = '';
-  for (let i = 0; i < batches.length; i++) {
-    const b = batches[i];
-    const rem = b.remaining_qty;
-    const sold = b.original_qty - rem;
-    const supplier = store.supps.find(s => s.id === b.supplier_id);
-    const totSales = (store.sales || []).filter(s => s.batch_id === b.batch_id).reduce((sum, s) => sum + s.total_amount, 0);
-    const isOpen = (xProd === i);
-    html += `<tr style="cursor:pointer;${isOpen ? 'background:#eafaf1;font-weight:700;' : ''}" onclick="toggleProd(${i})">
-      <td style="padding:6px 5px;text-align:center;font-size:0.76rem;color:var(--gray)">${i+1}</td>
-      <td style="padding:6px 5px;text-align:center"><strong style="color:var(--orange);font-size:0.79rem">${supplier ? supplier.name : '-'}</strong></td>
-      <td style="padding:6px 5px;text-align:center"><strong>${b.product_name}</strong></td>
-      <td style="padding:6px 5px;text-align:center">${N(b.original_qty)}</td>
-      <td style="padding:6px 5px;text-align:center;color:var(--green);font-weight:800">${N(sold)}</td>
-      <td style="padding:6px 5px;text-align:center;color:${rem<=0?'var(--red)':'var(--blue)'};font-weight:800">${N(rem)}${rem<=0?' ✅':''}</td>
-      <td style="padding:6px 5px;text-align:center;font-weight:900;color:var(--green)">${N(totSales)} جنيه</td>
-      <td style="padding:6px 5px;text-align:center">${isOpen ? '▲' : '▼'}</td>
-      <td style="padding:6px 5px;" onclick="event.stopPropagation()"><button class="btn btn-r btn-xs" onclick="deleteBatch('${b.batch_id}')">🗑️</button></td>
+
+  inv.forEach(batch => {
+    const batchSales  = sales.filter(s => s.batch_id === batch.batch_id);
+    const soldQty     = batchSales.reduce((s, x) => s + parseFloat(x.quantity  || 0), 0);
+    const soldWt      = batchSales.reduce((s, x) => s + parseFloat(x.weight_kg || 0), 0);
+    const batchTotal  = batchSales.reduce((s, x) => s + parseFloat(x.total_amount || 0), 0);
+    const remQty      = parseFloat(batch.remaining_qty || 0);
+    const origQty     = parseFloat(batch.original_qty  || batch.quantity || remQty + soldQty);
+    const isOpen      = _activeBatchId === batch.batch_id;
+    const isDone      = remQty <= 0;
+    const isCarry     = !!batch.carryover_from;
+    const date        = new Date(batch.batch_date).toLocaleDateString('ar-EG',{month:'short',day:'numeric'});
+
+    html += `
+    <tr style="cursor:pointer;${isOpen ? 'background:#eafaf1;font-weight:700;' : isDone ? 'background:#fafafa;opacity:.75;' : ''}"
+        id="br-${batch.batch_id}" onclick="toggleBatch('${batch.batch_id}')">
+      <td style="padding:7px 5px;text-align:center;font-size:0.76rem;color:var(--gray)">
+        ${isCarry ? '<span title="باقي من يوم سابق" style="color:#8e24aa">🔄</span>' : ''}
+        ${date}
+      </td>
+      <td style="padding:7px 5px;text-align:center">
+        <strong style="color:var(--orange);font-size:0.8rem">${batch.supplier_name || '-'}</strong>
+      </td>
+      <td style="padding:7px 5px;text-align:center">
+        <strong style="color:#0e6655">${batch.product_name}</strong>
+        <div style="font-size:0.7rem;color:var(--gray)">${batch.unit}</div>
+      </td>
+      <td style="padding:7px 5px;text-align:center;color:var(--gray)">
+        ${N(origQty)}
+      </td>
+      <td style="padding:7px 5px;text-align:center;color:var(--green);font-weight:800">
+        ${N(soldQty)}${soldWt > 0 ? `<div style="font-size:.69rem;color:var(--gray)">${N(soldWt)}ك</div>` : ''}
+      </td>
+      <td style="padding:7px 5px;text-align:center;font-weight:800;color:${isDone ? 'var(--red)' : 'var(--blue)'}">
+        ${N(remQty)} ${isDone ? '✅' : ''}
+      </td>
+      <td style="padding:7px 5px;text-align:center;font-weight:900;color:var(--green)">
+        ${N(batchTotal)} ج
+      </td>
+      <td style="padding:7px 5px;text-align:center">
+        ${isOpen ? '▲' : '▼'}
+      </td>
+      <td style="padding:7px 5px" onclick="event.stopPropagation()">
+        <button class="btn btn-r btn-xs" onclick="deleteBatchFromSales('${batch.batch_id}')">🗑️</button>
+      </td>
     </tr>`;
 
+    // ── منطقة التفاصيل + إضافة بيعة ──────────────────────────
     if (isOpen) {
-      const sales = (store.sales || []).filter(s => s.batch_id === b.batch_id);
-      const salesRows = sales.map(sl => {
-        const cust = store.custs.find(c => c.id === sl.customer_id);
-        const isCash = !sl.customer_id;
-        return `<tr>
-          <td style="padding:4px 5px">${sl.quantity || '-'}</td>
-          <td style="padding:4px 5px;font-weight:700">${isCash ? '<span style="background:#d5f5e3;color:var(--green);border-radius:4px;padding:1px 5px;font-size:0.69rem">نقدي</span>' : (cust ? cust.name : '-')}</td>
-          <td style="padding:4px 5px">${sl.weight_kg || '-'}</td>
-          <td style="padding:4px 5px">${N(sl.unit_price)} جنيه</td>
-          <td style="padding:4px 5px;font-weight:900;color:var(--green)">${N(sl.total_amount)} جنيه</td>
-          <td style="padding:4px 5px"><button class="btn btn-r btn-xs" onclick="event.stopPropagation();deleteSale('${sl.id}')">🗑️</button></td>
+      const salesRows = batchSales.map(sl => {
+        const cust   = sl.customer?.name || (store.custs||[]).find(c=>c.id===sl.customer_id)?.name;
+        const isCash = sl.is_cash || !sl.customer_id;
+        return `<tr style="background:#f8fff8;font-size:.79rem">
+          <td style="padding:4px 6px">${sl.quantity > 0 ? N(sl.quantity) : '-'}</td>
+          <td style="padding:4px 6px">
+            ${isCash
+              ? '<span style="background:#d5f5e3;color:var(--green);border-radius:4px;padding:1px 6px;font-size:.69rem;font-weight:800">نقدي</span>'
+              : `<span style="font-weight:700">${cust || 'عميل'}</span>`}
+          </td>
+          <td style="padding:4px 6px">${sl.weight_kg > 0 ? N(sl.weight_kg) + 'ك' : '-'}</td>
+          <td style="padding:4px 6px">${N(sl.unit_price)} ج</td>
+          <td style="padding:4px 6px;font-weight:900;color:var(--green)">${N(sl.total_amount)} ج</td>
+          <td style="padding:4px 6px">
+            <button class="btn btn-r btn-xs"
+              onclick="event.stopPropagation();deleteSaleLine('${sl.id}','${batch.batch_id}')">🗑️</button>
+          </td>
         </tr>`;
       }).join('');
 
-      html += `<tr style="background:#f8fff8"><td colspan="9" style="padding:0">
-        <div style="padding:8px 12px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
-            <strong style="color:var(--green);font-size:0.86rem">مبيعات ${b.product_name}</strong>
-            <button class="btn btn-g btn-sm" onclick="event.stopPropagation();openSaleForm('${b.batch_id}','${b.product_id}','${b.product_name}','${b.unit}')">+ بيعة</button>
+      html += `
+      <tr style="background:#f0faf5"><td colspan="9" style="padding:0">
+        <div style="padding:10px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <strong style="color:var(--green);font-size:.86rem">
+              📋 مبيعات: ${batch.product_name}
+              <span style="font-weight:400;font-size:.75rem;color:var(--gray);margin-right:6px">${batchSales.length} بيعة</span>
+            </strong>
+            <button class="btn btn-g btn-sm" onclick="event.stopPropagation();openInlineSaleForm('${batch.batch_id}')">
+              + بيعة جديدة
+            </button>
           </div>
-          ${sales.length ? `<table style="width:100%;border-collapse:collapse;font-size:0.79rem">
-            <thead><tr style="background:#e8f8ee"><th>عدد</th><th>العميل</th><th>وزن(ك)</th><th>سعر</th><th>المبلغ</th><th>🗑️</th></tr></thead>
+
+          ${batchSales.length ? `
+          <table style="width:100%;border-collapse:collapse;font-size:.79rem;margin-bottom:8px">
+            <thead>
+              <tr style="background:#e8f8ee">
+                <th style="padding:4px 6px">عدد</th>
+                <th style="padding:4px 6px">العميل</th>
+                <th style="padding:4px 6px">وزن</th>
+                <th style="padding:4px 6px">سعر</th>
+                <th style="padding:4px 6px">المبلغ</th>
+                <th style="padding:4px 6px"></th>
+              </tr>
+            </thead>
             <tbody>${salesRows}</tbody>
-            <tfoot><tr style="background:#eafaf1;font-weight:900">
-              <td colspan="4" style="text-align:right;padding:5px">الإجمالي</td>
-              <td style="padding:5px;color:var(--green)">${N(totSales)} جنيه</td>
-              <td></td>
-            </tr></tfoot>
-          </table>` : '<p style="color:#aaa;text-align:center;padding:10px">لا توجد مبيعات</p>'}
-          <div id="sf-${b.batch_id}"></div>
+            <tfoot>
+              <tr style="background:#eafaf1;font-weight:900">
+                <td colspan="4" style="text-align:right;padding:5px;color:var(--green)">الإجمالي</td>
+                <td style="padding:5px;color:var(--green)">${N(batchTotal)} ج</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>` : '<p style="color:#aaa;text-align:center;padding:8px 0">لا توجد مبيعات على هذه الدفعة</p>'}
+
+          <!-- نموذج إضافة بيعة مدمج -->
+          <div id="sf-${batch.batch_id}"></div>
         </div>
       </td></tr>`;
     }
-  }
+  });
+
   tbody.innerHTML = html;
-  updateDayTotal();
+  _updateDayTotal(sales);
 }
 
-function toggleProd(idx) {
-  xProd = (xProd === idx) ? null : idx;
-  renderSalesTable();
+// ─────────────────────────────────────────────────────────────
+// helpers
+// ─────────────────────────────────────────────────────────────
+function _hasSalesToday(batchId) {
+  return (store.sales||[]).some(s => s.batch_id === batchId);
 }
 
-function openSaleForm(batchId, productId, productName, unit) {
-  const container = document.getElementById(`sf-${batchId}`);
-  if (!container) return;
-  if (container.innerHTML.trim()) { container.innerHTML = ''; return; }
-  const custOptions = '<option value="">نقدي</option>' + (store.custs || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-  container.innerHTML = `
-    <div style="background:#f0faf5;border-radius:8px;padding:10px;margin-top:8px;border:1.5px solid var(--border)">
-      <div style="font-weight:800;color:var(--green);margin-bottom:7px;font-size:0.85rem">+ بيعة جديدة</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(75px,1fr));gap:6px;margin-bottom:7px">
-        <div><label class="lbl">عدد</label><input type="number" id="qty-${batchId}" min="0" step="0.01" oninput="calcSaleTotal('${batchId}')"></div>
-        <div><label class="lbl">العميل</label><select id="cust-${batchId}">${custOptions}</select></div>
-        <div><label class="lbl">وزن(ك)</label><input type="number" id="wt-${batchId}" min="0" step="0.01" oninput="calcSaleTotal('${batchId}')"></div>
-        <div><label class="lbl">سعر</label><input type="number" id="price-${batchId}" min="0" oninput="calcSaleTotal('${batchId}')"></div>
-        <div><label class="lbl">المبلغ</label><input type="number" id="total-${batchId}" readonly placeholder="0"></div>
-      </div>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-g btn-sm" onclick="confirmSale('${batchId}','${productId}','${productName}','${unit}')">✅ تأكيد</button>
-        <button class="btn btn-gr btn-sm" onclick="document.getElementById('sf-${batchId}').innerHTML=''">إلغاء</button>
-      </div>
-    </div>`;
-}
-
-function calcSaleTotal(batchId) {
-  const qty = parseFloat(document.getElementById(`qty-${batchId}`).value) || 0;
-  const wt = parseFloat(document.getElementById(`wt-${batchId}`).value) || 0;
-  const price = parseFloat(document.getElementById(`price-${batchId}`).value) || 0;
-  const units = wt > 0 ? wt : qty;
-  document.getElementById(`total-${batchId}`).value = (units * price) || '';
-}
-
-async function confirmSale(batchId, productId, productName, unit) {
-  const qty = parseFloat(document.getElementById(`qty-${batchId}`).value) || 0;
-  const wt = parseFloat(document.getElementById(`wt-${batchId}`).value) || 0;
-  const price = parseFloat(document.getElementById(`price-${batchId}`).value) || 0;
-  const custId = document.getElementById(`cust-${batchId}`).value;
-  const units = wt > 0 ? wt : qty;
-  if (!units || !price) return Toast.warning('أدخل الكمية والسعر');
-  const total = units * price;
-  const isCash = !custId;
-  try {
-    await API.sales.add({
-      batchId, productId, customerId: custId || null,
-      quantity: qty, weightKg: wt, unitPrice: price, total,
-      isCash, date: store._state.currentDate
-    });
-    // تحديث البيانات المحلية
-    const [inventory, sales, customers] = await Promise.all([
-      API.inventory.list(),
-      API.sales.list(store._state.currentDate),
-      API.customers.list()
-    ]);
-    store.set('inventory', inventory);
-    store.set('sales', sales);
-    store.set('customers', customers);
-    Toast.success(`✅ تم تسجيل البيع: ${N(total)} ج`);
-    renderSalesTable();
-    // تحديث صفحة الترحيلات إذا كانت مفتوحة
-    if (document.getElementById('page-tarhil').classList.contains('active')) renderTarhil();
-    // فاتورة تلقائية إذا انتهت الدفعة
-    const batch = inventory.find(b => b.batch_id === batchId);
-    if (batch && batch.remaining_qty <= 0) autoGenerateSupplierInvoice(batchId);
-  } catch(e) { AppError.log('confirmSale', e, true); }
-}
-
-async function autoGenerateSupplierInvoice(batchId) {
-  const batch = store.inv.find(b => b.batch_id === batchId);
-  if (!batch) return;
-  const sales = (store.sales || []).filter(s => s.batch_id === batchId);
-  if (!sales.length) return;
-  const subtotal = sales.reduce((s, x) => s + x.total_amount, 0);
-  const commission = Math.round(subtotal * 0.07);
-  const noulon = batch.noulon || 0;
-  const mashal = batch.mashal || 0;
-  const total = subtotal - commission - noulon - mashal;
-  try {
-    const newInv = await API.invoices.create({
-      type: 'supplier',
-      supplierId: batch.supplier_id,
-      date: store._state.currentDate,
-      subtotal, commission, noulon, mashal, discount: 0, total,
-      items: sales.map(s => ({
-        productId: s.product_id,
-        batchId: s.batch_id,
-        quantity: s.quantity || 0,
-        weightKg: s.weight_kg || 0,
-        unitPrice: s.unit_price
-      }))
-    });
-    const invs = await API.invoices.list();
-    store.set('invoices', invs);
-    Toast.success(`🧾 فاتورة ${newInv.invoice_number} — الصافي: ${N(total)} ج`);
-    if (document.getElementById('page-invoices').classList.contains('active')) renderInvoicesPage();
-  } catch(e) { AppError.log('autoGenerateSupplierInvoice', e); }
-}
-
-function updateDayTotal() {
-  const total = (store.sales || []).reduce((s, x) => s + x.total_amount, 0);
+function _updateDayTotal(sales) {
+  const total = (sales||[]).reduce((s,x) => s + parseFloat(x.total_amount||0), 0);
   const el = document.getElementById('day-total');
   if (el) el.textContent = N(total) + ' جنيه';
 }
 
-async function deleteSale(saleId) {
+// ─────────────────────────────────────────────────────────────
+// toggleBatch — فتح/إغلاق تفاصيل الدفعة
+// ─────────────────────────────────────────────────────────────
+function toggleBatch(batchId) {
+  _activeBatchId = _activeBatchId === batchId ? null : batchId;
+  renderSalesTable();
+}
+
+// ─────────────────────────────────────────────────────────────
+// openInlineSaleForm — نموذج البيع المدمج في الصف
+// ─────────────────────────────────────────────────────────────
+function openInlineSaleForm(batchId) {
+  const d = document.getElementById('sf-' + batchId);
+  if (!d) return;
+
+  // toggle: لو مفتوح، أغلقه
+  if (d.innerHTML.trim()) { d.innerHTML = ''; return; }
+
+  const batch = (store.inv||[]).find(b => b.batch_id === batchId);
+  const maxQty = batch ? parseFloat(batch.remaining_qty||0) : 0;
+  const unit   = batch?.unit || '';
+
+  const custOpts = '<option value="">نقدي 💵</option>' +
+    (store.custs||[]).map(c =>
+      `<option value="${c.id}">${c.name}${c.balance>0?` (${N(c.balance)} ج)`  :''}</option>`
+    ).join('');
+
+  d.innerHTML = `
+  <div style="background:#f0faf5;border-radius:9px;padding:11px;margin-top:8px;border:1.5px solid #a2d9ce">
+    <div style="font-weight:800;color:var(--green);margin-bottom:8px;font-size:.85rem">+ بيعة جديدة</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:7px;margin-bottom:8px">
+      <div>
+        <label class="lbl">عدد (${unit})</label>
+        <input type="number" id="sf-qty-${batchId}" placeholder="0" min="0" max="${maxQty}"
+          step="0.01" oninput="calcSF('${batchId}')">
+      </div>
+      <div>
+        <label class="lbl">وزن (كيلو)</label>
+        <input type="number" id="sf-wt-${batchId}" placeholder="0" min="0" step="0.01"
+          oninput="calcSF('${batchId}')">
+      </div>
+      <div>
+        <label class="lbl">سعر الوحدة</label>
+        <input type="number" id="sf-price-${batchId}" placeholder="0" min="0"
+          oninput="calcSF('${batchId}')">
+      </div>
+      <div>
+        <label class="lbl">الإجمالي</label>
+        <input type="number" id="sf-tot-${batchId}" readonly placeholder="0"
+          style="background:#e8f8f0;font-weight:800;color:var(--green)">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="lbl">العميل</label>
+        <select id="sf-cust-${batchId}" style="width:100%">${custOpts}</select>
+      </div>
+    </div>
+    <div style="display:flex;gap:7px">
+      <button class="btn btn-g btn-sm" onclick="confirmInlineSale('${batchId}',${maxQty})">✅ تأكيد</button>
+      <button class="btn btn-gr btn-sm" onclick="document.getElementById('sf-${batchId}').innerHTML=''">إلغاء</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--gray);margin-top:6px">
+      متبقي في المخزون: <strong style="color:var(--blue)">${N(maxQty)} ${unit}</strong>
+    </div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// calcSF — حساب الإجمالي تلقائياً
+// ─────────────────────────────────────────────────────────────
+function calcSF(batchId) {
+  const qty   = parseFloat(document.getElementById(`sf-qty-${batchId}`)?.value)   || 0;
+  const wt    = parseFloat(document.getElementById(`sf-wt-${batchId}`)?.value)    || 0;
+  const price = parseFloat(document.getElementById(`sf-price-${batchId}`)?.value) || 0;
+  const tot   = document.getElementById(`sf-tot-${batchId}`);
+  if (tot) tot.value = ((wt > 0 ? wt : qty) * price) || '';
+}
+
+// ─────────────────────────────────────────────────────────────
+// confirmInlineSale — تأكيد البيع
+// ─────────────────────────────────────────────────────────────
+async function confirmInlineSale(batchId, maxQty) {
+  const batch  = (store.inv||[]).find(b => b.batch_id === batchId);
+  if (!batch) return;
+
+  const qty    = parseFloat(document.getElementById(`sf-qty-${batchId}`)?.value)   || 0;
+  const wt     = parseFloat(document.getElementById(`sf-wt-${batchId}`)?.value)    || 0;
+  const price  = parseFloat(document.getElementById(`sf-price-${batchId}`)?.value) || 0;
+  const custId = document.getElementById(`sf-cust-${batchId}`)?.value || '';
+  const units  = wt > 0 ? wt : qty;
+
+  if (!units || !price) return Toast.warning('أدخل الكمية والسعر');
+  if (qty > 0 && qty > maxQty) return Toast.error(`الكمية (${qty}) أكبر من المتبقي (${N(maxQty)} ${batch.unit})`);
+
+  const total = units * price;
+
+  const btn = document.querySelector(`#sf-${batchId} .btn-g`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+
+  try {
+    await API.sales.add({
+      customerId: custId || null,
+      productId:  batch.product_id,
+      batchId:    batchId,
+      quantity:   qty || 0,
+      weightKg:   wt  || 0,
+      unitPrice:  price,
+      total,
+      isCash:     !custId,
+      date:       store._state.currentDate
+    });
+
+    // تحديث المخزون والمبيعات من DB
+    const [inventory, sales] = await Promise.all([
+      API.inventory.list(),
+      API.sales.list(store._state.currentDate)
+    ]);
+    store.set('inventory', inventory);
+    store.set('sales',     sales);
+
+    // تحديث رصيد العميل محلياً (سريع — DB trigger يُحدّث الرسمي)
+    if (custId) {
+      const idx = (store.custs||[]).findIndex(c => c.id === custId);
+      if (idx >= 0) store._state.customers[idx].balance = (store._state.customers[idx].balance || 0) + total;
+    }
+
+    const custName = custId
+      ? (store.custs||[]).find(c=>c.id===custId)?.name || 'العميل'
+      : 'نقدي';
+    Toast.success(`✅ ${N(total)} ج — ${batch.product_name} → ${custName}`);
+
+    // إعادة رسم الصفحة مع إبقاء الدفعة مفتوحة
+    renderSalesTable();
+
+  } catch(e) {
+    AppError.log('confirmInlineSale', e, true);
+    if (btn) { btn.disabled = false; btn.textContent = '✅ تأكيد'; }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// deleteSaleLine — حذف بيعة واحدة
+// ─────────────────────────────────────────────────────────────
+async function deleteSaleLine(saleId, batchId) {
   if (!confirm('حذف هذه البيعة؟')) return;
   try {
     await API.sales.delete(saleId);
@@ -188,22 +308,90 @@ async function deleteSale(saleId) {
       API.sales.list(store._state.currentDate)
     ]);
     store.set('inventory', inventory);
-    store.set('sales', sales);
-    Toast.success('تم الحذف');
+    store.set('sales',     sales);
+    // إعادة رسم مع إبقاء الدفعة مفتوحة
+    _activeBatchId = batchId;
     renderSalesTable();
-    if (document.getElementById('page-tarhil').classList.contains('active')) renderTarhil();
-  } catch(e) { AppError.log('deleteSale', e, true); }
+    Toast.success('تم حذف البيعة');
+  } catch(e) { AppError.log('deleteSaleLine', e, true); }
 }
 
-// دالة مساعدة لحذف الدفعة (مشاركة مع nazil)
-async function deleteBatch(batchId) {
-  if (!confirm('حذف هذه الدفعة؟')) return;
+// ─────────────────────────────────────────────────────────────
+// deleteBatchFromSales — حذف دفعة كاملة
+// ─────────────────────────────────────────────────────────────
+async function deleteBatchFromSales(batchId) {
+  const batch = (store.inv||[]).find(b => b.batch_id === batchId);
+  if (!confirm(`حذف دفعة "${batch?.product_name}"؟\nسيتم حذف الدفعة من المخزون.`)) return;
   try {
-    await sb.from('incoming_batches').delete().eq('id', batchId).eq('company_id', currentUser.company_id);
-    const updated = await API.inventory.list();
-    store.set('inventory', updated);
-    Toast.success('تم الحذف');
-    renderNazilList();
+    await sb.from('incoming_batches')
+      .delete()
+      .eq('id', batchId)
+      .eq('company_id', currentUser.company_id);
+
+    const [inventory, sales] = await Promise.all([
+      API.inventory.list(),
+      API.sales.list(store._state.currentDate)
+    ]);
+    store.set('inventory', inventory);
+    store.set('sales',     sales);
+    if (_activeBatchId === batchId) _activeBatchId = null;
     renderSalesTable();
-  } catch(e) { AppError.log('deleteBatch', e, true); }
+    Toast.success('تم حذف الدفعة');
+  } catch(e) { AppError.log('deleteBatchFromSales', e, true); }
+}
+
+// ─────────────────────────────────────────────────────────────
+// closeDay — إغلاق اليوم وترحيل المتبقيات
+// ─────────────────────────────────────────────────────────────
+async function closeDay() {
+  const remaining = (store.inv||[]).filter(b => parseFloat(b.remaining_qty) > 0);
+  if (!remaining.length) {
+    Toast.info('لا توجد بضاعة متبقية للترحيل');
+    return;
+  }
+
+  const newDate = prompt('تاريخ اليوم الجديد (YYYY-MM-DD):', _nextDay(store._state.currentDate));
+  if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate.trim())) {
+    if (newDate) Toast.warning('صيغة التاريخ يجب أن تكون YYYY-MM-DD');
+    return;
+  }
+
+  if (!confirm(`ترحيل ${remaining.length} دفعة متبقية ليوم ${newDate}؟`)) return;
+
+  try {
+    // ترحيل كل دفعة
+    await Promise.all(remaining.map(b =>
+      API.inventory.carryOver(b.batch_id, parseFloat(b.remaining_qty), newDate.trim())
+    ));
+
+    store.set('currentDate', newDate.trim());
+    updateDates();
+
+    const [inventory, sales, payments] = await Promise.all([
+      API.inventory.list(),
+      API.sales.list(newDate.trim()),
+      API.payments.list(newDate.trim())
+    ]);
+    store.set('inventory', inventory);
+    store.set('sales',     sales);
+    store.set('payments',  payments);
+
+    _activeBatchId = null;
+    renderSalesTable();
+    Toast.success(`✅ تم إغلاق اليوم — رُحِّل ${remaining.length} دفعة`);
+  } catch(e) { AppError.log('closeDay', e, true); }
+}
+
+function _nextDay(dateStr) {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0,10);
+}
+
+// ─────────────────────────────────────────────────────────────
+// للتوافق مع goToProduct في الكود القديم (من nazil)
+// ─────────────────────────────────────────────────────────────
+function goToProduct(batchId) {
+  _activeBatchId = batchId;
+  showPage('sales', document.querySelector('[data-page=sales]'));
 }
