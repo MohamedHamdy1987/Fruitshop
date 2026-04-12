@@ -1,266 +1,208 @@
 // ============================================================
-// renderers/sales.js — المبيعات (محدّث للتوافق مع API الجديد)
-// ملاحظة: هذا الملف يعمل مع كلٍّ من النظام القديم (S) والجديد (store)
+// js/renderers/sales.js — المبيعات وإغلاق اليوم (مدمج)
 // ============================================================
 
-// Bridge: نضمن التوافق مع كلا النظامين
-function _getSaleProducts() {
-  // النظام الجديد: المخزون من store
-  if (store.inv && store.inv.length) return store.inv;
-  // النظام القديم: من S.products
-  return S.products || [];
+// متغير لتتبع الصف المفتوح (للتوافق مع التصميم القديم)
+let _expandedBatchId = null;
+
+async function renderSalesTable() {
+  const tbody = document.getElementById('sales-tbody');
+  if (!tbody) return;
+
+  // عرض Skeleton
+  tbody.innerHTML = '<tr><td colspan="9"><div class="skeleton" style="height:100px"></div></td></tr>';
+
+  try {
+    // نستخدم store.inv (المخزون النشط) كمصدر للبيانات
+    const batches = store.inv || [];
+    // فلترة: النشط فقط والذي لم ينفد
+    const activeBatches = batches.filter(b => b.status === 'active' && b.remaining_qty > 0);
+
+    if (!activeBatches.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="color:#aaa;padding:22px;text-align:center">لا توجد أصناف في المخزون</td></tr>';
+      updateDayTotal(); return;
+    }
+
+    let html = '';
+    activeBatches.forEach((b, i) => {
+      const sold = b.original_qty - b.remaining_qty;
+      const totalValue = sold * (b.buy_price || 0); // قيمة تقريبية
+      const isX = _expandedBatchId === b.batch_id;
+      
+      html += `<tr style="cursor:pointer;${isX ? 'background:#eafaf1;font-weight:700;' : ''}" id="pr-${i}" onclick="toggleProduct('${b.batch_id}')">
+        <td style="padding:6px 5px;text-align:center;font-size:0.76rem;color:var(--gray)">${i + 1}</td>
+        <td style="padding:6px 5px;text-align:center"><strong style="color:var(--orange);font-size:0.79rem">${b.supplier_name || '-'}</strong></td>
+        <td style="padding:6px 5px;text-align:center"><strong>${b.product_name}</strong></td>
+        <td style="padding:6px 5px;text-align:center">${N(b.original_qty)}</td>
+        <td style="padding:6px 5px;text-align:center;color:var(--green);font-weight:800">${N(sold)}</td>
+        <td style="padding:6px 5px;text-align:center;color:var(--blue);font-weight:800">${N(b.remaining_qty)}</td>
+        <td style="padding:6px 5px;text-align:center;font-weight:900;color:var(--green)">${N(totalValue)} جنيه</td>
+        <td style="padding:6px 5px;text-align:center">${isX ? '▲' : '▼'}</td>
+        <td style="padding:6px 5px;" onclick="event.stopPropagation()"><button class="btn btn-r btn-xs" onclick="deleteInventoryBatch('${b.batch_id}')">🗑️</button></td>
+      </tr>`;
+      
+      if (isX) {
+        html += `<tr style="background:#f8fff8"><td colspan="9" style="padding:0">
+          <div style="padding:8px 12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+              <strong style="color:var(--green);font-size:0.86rem">تسجيل بيع — ${b.product_name}</strong>
+              <button class="btn btn-g btn-sm" onclick="event.stopPropagation();openSaleModal('${b.batch_id}', '${b.product_id}', '${b.product_name}', '${b.unit}', ${b.remaining_qty})">+ بيع</button>
+            </div>            <div id="sf-${b.batch_id}"></div>
+          </div>
+        </td></tr>`;
+      }
+    });
+
+    tbody.innerHTML = html;
+    updateDayTotal();
+
+  } catch (e) {
+    AppError.log('renderSalesTable', e);
+    tbody.innerHTML = '<tr><td colspan="9" style="color:red;padding:20px">خطأ في التحميل</td></tr>';
+  }
 }
 
-function _getSaleCustomers() {
-  return store.custs?.length ? store.custs : (S.customers || []);
+function toggleProduct(batchId) {
+  _expandedBatchId = (_expandedBatchId === batchId) ? null : batchId;
+  renderSalesTable();
 }
-
-function _getSaleSuppliers() {
-  return store.supps?.length ? store.supps : (S.suppliers || []);
-}
-
-
-// --- دوال مساعدة للترحيل (تُستخدم من sales و customers) ---
-function addToTarhil(custId, pName, qty, unit, wt, price, total) {
-  if (!custId) return;
-  if (!S.tarhilLog[S.date]) S.tarhilLog[S.date] = {};
-  if (!S.tarhilLog[S.date][custId]) S.tarhilLog[S.date][custId] = [];
-  S.tarhilLog[S.date][custId].push({ productName: pName, qty, unit, weight: wt, price, total });
-}
-
-function removeFromTarhil(custId, date, total) {
-  if (!custId || !S.tarhilLog[date] || !S.tarhilLog[date][custId]) return;
-  const idx = S.tarhilLog[date][custId].findIndex(t => t.total === total);
-  if (idx >= 0) S.tarhilLog[date][custId].splice(idx, 1);
-  postDailyTotal(custId, date);
-}
-
-function postDailyTotal(custId, date) {
-  const cust = S.customers.find(c => c.id == custId);
-  if (!cust) return;
-  cust.ledger = cust.ledger.filter(e => !(e.type === 'order' && e.isTarhil && e.date === date));
-  const items = (S.tarhilLog[date] && S.tarhilLog[date][custId]) || [];
-  if (!items.length) return;
-  const dayTotal = items.reduce((s, t) => s + t.total, 0);
-  cust.ledger.push({ date, type: 'order', amount: dayTotal, ref: 'يومية', isTarhil: true, tarhilDate: date });
-}
-
-// --- جدول المبيعات ---
-function goToProduct(idx) {
-  xProd = idx;
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-sales').classList.add('active');
-  document.querySelectorAll('nav.tabs button')[2].classList.add('active');
-  renderAll();
-  setTimeout(() => {
-    const r = document.getElementById('pr-' + idx);
-    if (r) r.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 150);
-}
-
-function toggleProd(i) { xProd = xProd === i ? null : i; renderSalesTable(); }
 
 function updateDayTotal() {
-  const t = S.products.reduce((s, p) => s + p.salesLog.reduce((ss, x) => ss + x.total, 0), 0);
-  document.getElementById('day-total').textContent = N(t) + ' جنيه';
+  // حساب إجمالي المبيعات من جدول daily_sales في store
+  const todaySales = store.sales || [];
+  const total = todaySales.reduce((s, sale) => s + (parseFloat(sale.total_amount) || 0), 0);
+  document.getElementById('day-total').textContent = N(total) + ' جنيه';
 }
 
-function delProduct(i) {
-  if (!confirm('حذف هذا الصنف؟')) return;
-  S.products.splice(i, 1);
-  if (xProd === i) xProd = null;
-  else if (xProd > i) xProd--;  // تصحيح index بعد الحذف
-  save(); renderNazilList(); renderSalesTable(); renderBaqi(); refreshDropdowns();
-}
+// ============================================================
+// إغلاق اليوم وترحيل المتبقي — نسخة Supabase المتكاملة
+// ============================================================
+async function closeDay() {
+  // 1. جلب الأصناف المتبقية فعلياً من المخزون النشط
+  const remainingBatches = store.inv.filter(b => 
+    b.remaining_qty > 0 && b.status === 'active'
+  );
 
-function renderSalesTable() {
-  const tbody = document.getElementById('sales-tbody');
-  if (!S.products.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="color:#aaa;padding:22px;text-align:center">لا توجد أصناف</td></tr>';
-    updateDayTotal(); return;
+  if (!remainingBatches.length) {
+    Toast.info('✅ لا توجد بضاعة متبقية — اليوم مغلق بالفعل');
+    return;
   }
-  let html = '';
-  S.products.forEach((p, i) => {
-    const rem  = p.totalQty - p.sold;
-    const sup  = S.suppliers.find(s => s.id == p.supplierId);
-    const done = rem <= 0;
-    const tot  = p.salesLog.reduce((s, x) => s + x.total, 0);
-    const isX  = xProd === i;
-    html += `<tr style="cursor:pointer;${isX ? 'background:#eafaf1;font-weight:700;' : ''}" id="pr-${i}" onclick="toggleProd(${i})">
-      <td style="padding:6px 5px;text-align:center;font-size:0.76rem;color:var(--gray)">${i + 1}</td>
-      <td style="padding:6px 5px;text-align:center"><strong style="color:var(--orange);font-size:0.79rem">${sup ? sup.name : '-'}</strong></td>
-      <td style="padding:6px 5px;text-align:center"><strong>${p.name}</strong></td>
-      <td style="padding:6px 5px;text-align:center">${p.totalQty}</td>
-      <td style="padding:6px 5px;text-align:center;color:var(--green);font-weight:800">${p.sold}</td>
-      <td style="padding:6px 5px;text-align:center;color:${done ? 'var(--red)' : 'var(--blue)'};font-weight:800">${rem}${done ? ' ✅' : ''}</td>
-      <td style="padding:6px 5px;text-align:center;font-weight:900;color:var(--green)">${N(tot)} جنيه</td>
-      <td style="padding:6px 5px;text-align:center">${isX ? '▲' : '▼'}</td>
-      <td style="padding:6px 5px;" onclick="event.stopPropagation()"><button class="btn btn-r btn-xs" onclick="delProduct(${i})">🗑️</button></td>
-    </tr>`;
-    if (isX) {
-      const salesRows = p.salesLog.map((sl, si) => {
-        const cust   = S.customers.find(c => c.id == sl.custId);
-        const isCash = !sl.custId;
-        return `<tr>
-          <td style="padding:4px 5px">${sl.qty || '-'}</td>
-          <td style="padding:4px 5px;font-weight:700">${isCash ? '<span style="background:#d5f5e3;color:var(--green);border-radius:4px;padding:1px 5px;font-size:0.69rem">نقدي</span>' : (cust ? cust.name : '-')}</td>
-          <td style="padding:4px 5px">${sl.weight || '-'}</td>
-          <td style="padding:4px 5px">${sl.price} جنيه</td>
-          <td style="padding:4px 5px;font-weight:900;color:var(--green)">${N(sl.total)} جنيه</td>
-          <td style="padding:4px 5px"><button class="btn btn-y btn-xs" style="background:#d4ac0d;color:#fff;" onclick="event.stopPropagation();openEditSale(${i},${si})">✏️</button></td>
-          <td style="padding:4px 5px"><button class="btn btn-r btn-xs" onclick="event.stopPropagation();delSaleLine(${i},${si})">🗑️</button></td>
-        </tr>`;
-      }).join('');
-      html += `<tr style="background:#f8fff8"><td colspan="9" style="padding:0">
-        <div style="padding:8px 12px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
-            <strong style="color:var(--green);font-size:0.86rem">مبيعات ${p.name}</strong>
-            <button class="btn btn-g btn-sm" onclick="event.stopPropagation();openSaleForm(${i})">+ بيعة</button>
-          </div>
-          ${p.salesLog.length
-            ? `<table style="width:100%;border-collapse:collapse;font-size:0.79rem">
-                <thead><tr style="background:#e8f8ee"><th>عدد</th><th>العميل</th><th>وزن(ك)</th><th>سعر</th><th>المبلغ</th><th>✏️</th><th>🗑️</th></tr></thead>
-                <tbody>${salesRows}</tbody>
-                <tfoot><tr style="background:#eafaf1;font-weight:900">
-                  <td colspan="4" style="text-align:right;padding:5px">الإجمالي</td>
-                  <td style="padding:5px;color:var(--green)">${N(tot)} جنيه</td>
-                  <td colspan="2"></td>
-                </tr></tfoot>
-              </table>`
-            : '<p style="color:#aaa;text-align:center;padding:10px">لا توجد مبيعات</p>'}
-          <div id="sf-${i}"></div>
-        </div>
-      </td></tr>`;
+
+  if (!confirm(`ترحيل ${remainingBatches.length} صنف متبقي لليوم التالي؟`)) return;
+
+  // واجهة تحميل
+  syncUI.setStatus('saving', 'جاري إغلاق اليوم وترحيل المتبقي...');
+  const btn = document.querySelector('.btn-o'); // زر إغلاق اليوم
+  if(btn) { btn.disabled = true; btn.textContent = 'جاري الإغلاق...'; }
+
+  try {
+    // 2. حساب تاريخ الغد    const today = new Date(store._state.currentDate);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const nextDateStr = tomorrow.toISOString().slice(0, 10);
+
+    // 3. ترحيل كل دفعة متبقية واحدة تلو الأخرى
+    for (const batch of remainingBatches) {
+      await API.inventory.carryOver(batch.batch_id, batch.remaining_qty, nextDateStr);
     }
-  });
-  tbody.innerHTML = html;
-  updateDayTotal();
+
+    // 4. تحديث التاريخ في الواجهة والمخزن المحلي
+    store.set('currentDate', nextDateStr);
+    updateDates();
+
+    // 5. إعادة تحميل بيانات اليوم الجديد
+    await loadTodayData();
+
+    // 6. تحديث الواجهات فوراً
+    await renderBaqi();      // المتبقي سيظهر هنا
+    await renderNazilList(); // النازل الجديد سيظهر هنا (فارغ حالياً)
+    await renderSalesTable();
+    await renderDashboard(); // تحديث الإحصائيات
+
+    Toast.success('✅ تم إغلاق اليوم وترحيل المتبقي بنجاح');
+
+  } catch (e) {
+    AppError.log('closeDay', e, true);
+  } finally {
+    syncUI.setStatus('', 'محفوظ على السحابة ✓');
+    if(btn) { btn.disabled = false; btn.textContent = '🌙 إغلاق اليوم'; }
+  }
 }
 
-// --- نموذج البيع ---
-function openSaleForm(i) {
-  const d = document.getElementById('sf-' + i);
-  if (!d) return;
-  if (d.innerHTML.trim()) { d.innerHTML = ''; return; }
-  d.innerHTML = buildSaleForm(i, null);
-}
-
-function openEditSale(pi, si) {
-  const d = document.getElementById('sf-' + pi);
-  if (!d) return;
-  d.innerHTML = buildSaleForm(pi, si);
-}
-
-function buildSaleForm(pi, editIdx) {
-  const p    = S.products[pi];
-  const sl   = editIdx !== null ? p.salesLog[editIdx] : null;
+// دالة مساعدة لفتح مودال البيع السريع (لتحسين تجربة المستخدم)
+function openSaleModal(batchId, productId, productName, unit, maxQty) {
+  const modal = document.getElementById('quick-sale-modal');
+  if (!modal) return;
+  
   const custOpts = '<option value="">نقدي</option>' +
-    S.customers.map(c => `<option value="${c.id}" ${sl && sl.custId == c.id ? 'selected' : ''}>${c.name}</option>`).join('');
-  return `<div style="background:#f0faf5;border-radius:8px;padding:10px;margin-top:8px;border:1.5px solid var(--border)">
-    <div style="font-weight:800;color:var(--green);margin-bottom:7px;font-size:0.85rem">${editIdx !== null ? '✏️ تعديل' : '+ بيعة جديدة'}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(75px,1fr));gap:6px;margin-bottom:7px">
-      <div><label class="lbl">عدد</label><input type="number" id="sf-qty-${pi}" value="${sl && sl.qty || ''}" placeholder="0" min="0" oninput="calcSF(${pi})"></div>
-      <div><label class="lbl">العميل</label><select id="sf-cust-${pi}">${custOpts}</select></div>
-      <div><label class="lbl">وزن(ك)</label><input type="number" id="sf-wt-${pi}" value="${sl && sl.weight || ''}" placeholder="0" step="0.01" min="0" oninput="calcSF(${pi})"></div>
-      <div><label class="lbl">سعر</label><input type="number" id="sf-price-${pi}" value="${sl ? sl.price : ''}" placeholder="0" min="0" oninput="calcSF(${pi})"></div>
-      <div><label class="lbl">المبلغ</label><input type="number" id="sf-tot-${pi}" readonly placeholder="0" value="${sl ? sl.total : ''}"></div>
-    </div>
-    <div style="display:flex;gap:6px">
-      <button class="btn btn-g btn-sm" onclick="${editIdx !== null ? `saveEditSale(${pi},${editIdx})` : `confirmSale(${pi})`}">✅ ${editIdx !== null ? 'حفظ' : 'تأكيد'}</button>
-      <button class="btn btn-gr btn-sm" onclick="document.getElementById('sf-${pi}').innerHTML=''">إلغاء</button>
-    </div>
-  </div>`;
+    (store.custs||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+
+  modal.innerHTML = `
+    <div class="modal-box">
+      <button class="cx" onclick="closeModal('quick-sale-modal')">✕</button>
+      <h3>🛒 بيع — ${productName}</h3>
+      <div class="frow"><label>العميل</label><select id="qs-cust">${custOpts}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="frow"><label>الكمية (${unit})</label><input type="number" id="qs-qty" placeholder="0" min="0" max="${maxQty}" step="0.01" oninput="calcQS()"></div>
+        <div class="frow"><label>سعر الوحدة</label><input type="number" id="qs-price" placeholder="0" min="0" oninput="calcQS()"></div>
+      </div>      <div class="frow"><label>الإجمالي</label><input type="number" id="qs-total" readonly style="background:#f0f0f0"></div>
+      <button class="btn btn-g" style="width:100%" onclick="confirmQuickSale('${batchId}','${productId}','${productName}','${unit}',${maxQty})">✅ تأكيد البيع</button>
+    </div>`;
+  modal.classList.add('open');
 }
 
-function calcSF(i) {
-  const qty   = parseFloat(document.getElementById(`sf-qty-${i}`).value)   || 0;
-  const wt    = parseFloat(document.getElementById(`sf-wt-${i}`).value)    || 0;
-  const price = parseFloat(document.getElementById(`sf-price-${i}`).value) || 0;
-  document.getElementById(`sf-tot-${i}`).value = (wt > 0 ? wt : qty) * price || '';
+function calcQS() {
+  const qty   = parseFloat(document.getElementById('qs-qty')?.value)   || 0;
+  const price = parseFloat(document.getElementById('qs-price')?.value) || 0;
+  const tot   = document.getElementById('qs-total');
+  if (tot) tot.value = (qty * price) || '';
 }
 
-function confirmSale(i) {
-  const p      = S.products[i];
-  const qty    = parseFloat(document.getElementById(`sf-qty-${i}`).value)   || 0;
-  const wt     = parseFloat(document.getElementById(`sf-wt-${i}`).value)    || 0;
-  const price  = parseFloat(document.getElementById(`sf-price-${i}`).value) || 0;
-  const custId = document.getElementById(`sf-cust-${i}`).value;
-  const units  = wt > 0 ? wt : qty;
-  if (!units || !price) return alert('أدخل الكمية والسعر');
-  if (qty > 0 && qty > (p.totalQty - p.sold)) return alert('الكمية أكبر من المتبقي!');
-  const total  = units * price;
-  const isCash = !custId;
-  const colId  = isCash ? (Date.now() + Math.random()) : null;
-  S.products[i].sold        += qty || 0;
-  S.products[i].totalWeight  = (p.totalWeight || 0) + (wt || 0);
-  S.products[i].salesLog.push({ date: S.date, qty: qty || null, weight: wt || null, price, total, custId, collectionId: colId });
-  if (isCash) {
-    S.collections.push({ id: colId, date: S.date, custId: null, amount: total, note: `نقدية — ${p.name} ${qty || wt} ${qty ? p.unit : 'ك'} × ${price}`, isCash: true, isDiscount: false });
-  } else {
-    addToTarhil(custId, p.name, qty || null, p.unit, wt || null, price, total);
-    postDailyTotal(custId, S.date);
-  }
-  save(); renderAll(); checkAutoInvoice(p.supplierId);
-}
+async function confirmQuickSale(batchId, productId, productName, unit, maxQty) {
+  const custId = document.getElementById('qs-cust').value;
+  const qty    = parseFloat(document.getElementById('qs-qty').value)   || 0;
+  const price  = parseFloat(document.getElementById('qs-price').value) || 0;
 
-function saveEditSale(pi, si) {
-  const p   = S.products[pi];
-  const old = p.salesLog[si];
-  if (old.custId) removeFromTarhil(old.custId, old.date, old.total);
-  if (!old.custId && old.collectionId) S.collections = S.collections.filter(c => c.id !== old.collectionId);
-  S.products[pi].sold        -= (old.qty    || 0);
-  S.products[pi].totalWeight  = (p.totalWeight || 0) - (old.weight || 0);
-  const qty    = parseFloat(document.getElementById(`sf-qty-${pi}`).value)   || 0;
-  const wt     = parseFloat(document.getElementById(`sf-wt-${pi}`).value)    || 0;
-  const price  = parseFloat(document.getElementById(`sf-price-${pi}`).value) || 0;
-  const custId = document.getElementById(`sf-cust-${pi}`).value;
-  const units  = wt > 0 ? wt : qty;
-  if (!units || !price) return alert('أدخل الكمية والسعر');
-  const total  = units * price;
-  const isCash = !custId;
-  const colId  = isCash ? (Date.now() + Math.random()) : null;
-  p.salesLog[si] = { date: S.date, qty: qty || null, weight: wt || null, price, total, custId, collectionId: colId };
-  S.products[pi].sold        += qty || 0;
-  S.products[pi].totalWeight  = (p.totalWeight || 0) + (wt || 0);
-  if (isCash) {
-    S.collections.push({ id: colId, date: S.date, custId: null, amount: total, note: `نقدية — ${p.name}`, isCash: true, isDiscount: false });
-  } else {
-    addToTarhil(custId, p.name, qty || null, p.unit, wt || null, price, total);
-    postDailyTotal(custId, S.date);
-  }
-  save(); renderAll();
-}
+  if (!qty || !price) return Toast.warning('أدخل الكمية والسعر');
+  if (qty > maxQty) return Toast.error('الكمية أكبر من المتبقي!');
 
-function delSaleLine(pi, si) {
-  const p  = S.products[pi];
-  const sl = p.salesLog[si];
-  if (sl.custId) removeFromTarhil(sl.custId, sl.date, sl.total);
-  if (!sl.custId && sl.collectionId) S.collections = S.collections.filter(c => c.id !== sl.collectionId);
-  p.sold        -= (sl.qty    || 0);
-  p.totalWeight  = (p.totalWeight || 0) - (sl.weight || 0);
-  p.salesLog.splice(si, 1);
-  save(); renderAll();
-}
+  const total = qty * price;
+  try {
+    await API.sales.add({
+      customerId: custId || null,
+      productId,
+      batchId,
+      quantity: qty,
+      unitPrice: price,
+      total,
+      isCash: !custId,
+      date: store._state.currentDate
+    });
 
-function closeDay() {
-  const rem = S.products.filter(p => (p.totalQty - p.sold) > 0);
-  if (!rem.length)                           { alert('لا توجد بضاعة للترحيل!'); return; }
-  if (!confirm(`ترحيل ${rem.length} صنف للغد؟`)) return;
-  S.products = S.products.map(p => {
-    if ((p.totalQty - p.sold) <= 0) return null;
-    return { ...p, totalQty: p.totalQty - p.sold, sold: 0, salesLog: [], carryoverFrom: S.date };
-  }).filter(Boolean);
-  xProd = null;
-  const nd = new Date(); nd.setDate(nd.getDate() + 1);
-  S.date = fmtDate(nd);
-  save(); updateDates(); renderAll();
-  alert('✅ تم إغلاق اليوم!');
-}
+    closeModal('quick-sale-modal');
+    Toast.success(`✅ تم تسجيل البيع: ${N(total)} جنيه`);
+    
+    // تحديث البيانات
+    const [inv, sales] = await Promise.all([
+      API.inventory.list(),
+      API.sales.list(store._state.currentDate)
+    ]);
+    store.set('inventory', inv);
+    store.set('sales', sales);
+    
+    renderSalesTable();
+    renderDashboard(); // تحديث فوري للإحصائيات
 
-function checkAutoInvoice(supplierId) {
-  const sp = S.products.filter(p => p.supplierId == supplierId);
-  if (sp.length && sp.every(p => (p.totalQty - p.sold) <= 0) &&
-      !S.invoices.some(inv => inv.supplierId == supplierId && inv.date === S.date))
-    generateInvoiceFor(supplierId, true);
+  } catch(e) { AppError.log('confirmQuickSale', e, true); }
+}
+// حذف دفعة
+async function deleteInventoryBatch(batchId) {
+  if (!confirm('حذف هذه الدفعة نهائياً؟')) return;
+  try {
+    await sb.from('incoming_batches').delete().eq('id', batchId).eq('company_id', currentUser.company_id);
+    const updated = await API.inventory.list();
+    store.set('inventory', updated);
+    Toast.success('تم الحذف');
+    renderSalesTable(); renderNazilList(); renderBaqi();
+  } catch(e) { AppError.log('deleteInventoryBatch', e, true); }
 }
