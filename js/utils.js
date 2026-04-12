@@ -3,6 +3,24 @@
 /**
  * تنسيق التاريخ بالعربية
  */
+// تحديث التاريخ في جميع شارات الصفحات
+function updateDates() {
+  const displayDate = new Date(store._state.currentDate).toLocaleDateString('ar-EG', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+  ['headerDate', 'sales-badge', 'col-badge', 'exp-badge', 'tarhil-badge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = displayDate;
+  });
+}
+
+// دالة الانتقال إلى صفحة الترحيلات بتاريخ محدد
+function goToTarhilDate(date) {
+  store._state.currentDate = date;
+  updateDates();
+  showPage('tarhil', document.querySelector('[data-page="tarhil"]'));
+  renderTarhil();
+}
 function fmtDate(d) {
   return d.toLocaleDateString('ar-EG', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
