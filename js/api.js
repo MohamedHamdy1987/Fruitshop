@@ -12,10 +12,6 @@
 // ─────────────────────────────────────────────────────────────
 // Helper: إضافة company_id تلقائياً لكل العمليات
 // ─────────────────────────────────────────────────────────────
-async delete(saleId) {
-  const { error } = await sb.from('daily_sales').delete().eq('id', saleId).eq('company_id', currentUser.company_id);
-  if (error) throw error;
-},
 function withCompany(data) {
   const companyId = currentUser?.company_id;
   if (!companyId) {
