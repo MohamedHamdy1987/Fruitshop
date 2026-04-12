@@ -5,56 +5,48 @@
 // لا يستخدم S.products أو S.tarhilLog
 // ============================================================
 
-// ─────────────────────────────────────────────────────────────
-// حالة الصفحة المحلية (UI فقط — لا بيانات عمل)
-// ─────────────────────────────────────────────────────────────
-let _activeBatchId = null;   // الدفعة المفتوحة حالياً
-
-// ─────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────
-// renderSalesTable — نقطة الدخول الرئيسية (نسخة محسنة)
-// ─────────────────────────────────────────────────────────────
 async function renderSalesTable() {
   const tbody = document.getElementById('sales-tbody');
   if (!tbody) return;
 
-  const inv   = store.inv || [];
   const sales = store.sales || [];
-
-  // 1️⃣ نجمع كل الـ batch_id التي حدثت عليها مبيعات اليوم
-  const soldBatchIds = new Set(sales.map(s => s.batch_id));
-
-  // 2️⃣ فلترة ذكية: تحتفظ بالنشط + الذي خلص لكن بيع منه اليوم
-  let displayBatches = inv.filter(b => {
-    const rem = parseFloat(b.remaining_qty || 0);
-    return rem > 0 || soldBatchIds.has(b.batch_id);
-  });
-
-  // 3️⃣ إصلاح اختفاء الدفعة عند الصفر:
-  // لو الـ View في قاعدة البيانات حذف الدفعة لما وصلت 0، نعيد بناءها من المبيعات
-  const missingIds = [...soldBatchIds].filter(id => !displayBatches.find(b => b.batch_id === id));
-  if (missingIds.length > 0) {
-    const reconstructed = missingIds.map(bId => {
-      const batchSales = sales.filter(s => s.batch_id === bId);
-      const first = batchSales[0];
-      const totalSold = batchSales.reduce((sum, s) => sum + parseFloat(s.quantity||0) + parseFloat(s.weight_kg||0), 0);
+  
+  // 1️⃣ نجيب كل الـ batch IDs الفريدة من المبيعات
+  const batchIdsFromSales = [...new Set(sales.map(s => s.batch_id).filter(Boolean))];
+  
+  // 2️⃣ نجيب الدفعات من المخزون
+  const inv = store.inv || [];
+  
+  // 3️⃣ نبني قاموس (Map) للدفعات المتاحة
+  const batchMap = new Map();
+  inv.forEach(b => batchMap.set(b.batch_id, b));
+  
+  // 4️⃣ لو فيه دفعات في المبيعات مش موجودة في المخزون (خلصت)، نبني بيانات مؤقتة
+  batchIdsFromSales.forEach(bid => {
+    if (!batchMap.has(bid)) {
+      // نبني دفعة وهمية من أول بيع
+      const batchSales = sales.filter(s => s.batch_id === bid);
+      const firstSale = batchSales[0];
+      const totalQty = batchSales.reduce((sum, s) => sum + parseFloat(s.quantity || 0), 0);
+      const totalWeight = batchSales.reduce((sum, s) => sum + parseFloat(s.weight_kg || 0), 0);
       
-      return {
-        batch_id:       bId,
-        product_name:   first.product?.name || 'منتج',
-        supplier_name:  '-',
-        unit:           first.product?.unit || 'وحدة',
-        remaining_qty:  0,
-        original_qty:   totalSold,
-        batch_date:     store._state.currentDate,
+      batchMap.set(bid, {
+        batch_id: bid,
+        product_name: firstSale.product?.name || 'منتج',
+        supplier_name: '-',
+        unit: firstSale.product?.unit || 'وحدة',
+        remaining_qty: 0,
+        original_qty: totalQty + totalWeight,
+        batch_date: firstSale.sale_date || store._state.currentDate,
         carryover_from: null,
-        cost_per_unit:  0
-      };
-    });
-    displayBatches = [...displayBatches, ...reconstructed];
-  }
+        cost_per_unit: 0
+      });
+    }
+  });
+  
+  // 5️⃣ نحول الـ Map لقائمة
+  const displayBatches = Array.from(batchMap.values());
 
-  // ⬇️ باقي الكود الأصلي يكمل من هنا بدون تغيير ⬇️
   if (!displayBatches.length && !sales.length) {
     tbody.innerHTML = `<tr><td colspan="9" style="color:#aaa;padding:22px;text-align:center">
       لا توجد بضاعة — أضف دفعة من تبويب المخزون
@@ -62,25 +54,8 @@ async function renderSalesTable() {
     _updateDayTotal(sales);
     return;
   }
-
   let html = '';
   displayBatches.forEach(batch => {
-    const batchSales  = sales.filter(s => s.batch_id === batch.batch_id);
-    const soldQty     = batchSales.reduce((s, x) => s + parseFloat(x.quantity  || 0), 0);
-    const soldWt      = batchSales.reduce((s, x) => s + parseFloat(x.weight_kg || 0), 0);
-    const batchTotal  = batchSales.reduce((s, x) => s + parseFloat(x.total_amount || 0), 0);
-    const remQty      = parseFloat(batch.remaining_qty || 0);
-    const origQty     = parseFloat(batch.original_qty  || batch.quantity || remQty + soldQty);
-    const isOpen      = _activeBatchId === batch.batch_id;
-    const isDone      = remQty <= 0;
-    const isCarry     = !!batch.carryover_from;
-    const date        = new Date(batch.batch_date).toLocaleDateString('ar-EG',{month:'short',day:'numeric'});
-
-    // ... (يكمل باقي الكود الأصلي كما هو حتى نهاية الدالة)
-
-  let html = '';
-
-  inv.forEach(batch => {
     const batchSales  = sales.filter(s => s.batch_id === batch.batch_id);
     const soldQty     = batchSales.reduce((s, x) => s + parseFloat(x.quantity  || 0), 0);
     const soldWt      = batchSales.reduce((s, x) => s + parseFloat(x.weight_kg || 0), 0);
@@ -126,11 +101,9 @@ async function renderSalesTable() {
       </td>
     </tr>`;
 
-    // ── منطقة التفاصيل + إضافة بيعة ──────────────────────────
     if (isOpen) {
       const salesRows = batchSales.map(sl => {
-        const cust   = sl.customer?.name || (store.custs||[]).find(c=>c.id===sl.customer_id)?.name;
-        const isCash = sl.is_cash || !sl.customer_id;
+        const cust   = sl.customer?.name || (store.custs||[]).find(c=>c.id===sl.customer_id)?.name;        const isCash = sl.is_cash || !sl.customer_id;
         return `<tr style="background:#f8fff8;font-size:.79rem">
           <td style="padding:4px 6px">${sl.quantity > 0 ? N(sl.quantity) : '-'}</td>
           <td style="padding:4px 6px">
@@ -165,36 +138,13 @@ async function renderSalesTable() {
           <table style="width:100%;border-collapse:collapse;font-size:.79rem;margin-bottom:8px">
             <thead>
               <tr style="background:#e8f8ee">
-                <th style="padding:4px 6px">عدد</th>
-                <th style="padding:4px 6px">العميل</th>
-                <th style="padding:4px 6px">وزن</th>
-                <th style="padding:4px 6px">سعر</th>
-                <th style="padding:4px 6px">المبلغ</th>
-                <th style="padding:4px 6px"></th>
-              </tr>
-            </thead>
-            <tbody>${salesRows}</tbody>
-            <tfoot>
-              <tr style="background:#eafaf1;font-weight:900">
-                <td colspan="4" style="text-align:right;padding:5px;color:var(--green)">الإجمالي</td>
-                <td style="padding:5px;color:var(--green)">${N(batchTotal)} ج</td>
-                <td></td>
-              </tr>
-            </tfoot>
-          </table>` : '<p style="color:#aaa;text-align:center;padding:8px 0">لا توجد مبيعات على هذه الدفعة</p>'}
-
-          <!-- نموذج إضافة بيعة مدمج -->
-          <div id="sf-${batch.batch_id}"></div>
-        </div>
-      </td></tr>`;
-    }
-  });
-
-  tbody.innerHTML = html;
-  _updateDayTotal(sales);
-}
+                <th style="padding:4 ─────────────────────────────────────────────────────────────
+// حالة الصفحة المحلية (UI فقط — لا بيانات عمل)
+// ─────────────────────────────────────────────────────────────
+let _activeBatchId = null;   // الدفعة المفتوحة حالياً
 
 // ─────────────────────────────────────────────────────────────
+// ───────────────────────────────────── ─────────────────────────────────────────────────────────────
 // helpers
 // ─────────────────────────────────────────────────────────────
 function _hasSalesToday(batchId) {
