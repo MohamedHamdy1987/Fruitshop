@@ -1,100 +1,67 @@
-// ===================== renderers/tarhil.js — الترحيلات (مدمج مع Supabase) =====================
+// ===================== renderers/tarhil.js — الترحيلات (نسخة القديم مع البيانات من store.sales) =====================
 
 async function renderTarhil() {
   const container = document.getElementById('tarhil-body');
-  const badge = document.getElementById('tarhil-badge');
   if (!container) return;
-
-  container.innerHTML = '<div class="skeleton" style="height:150px"></div>';
-  if (badge) badge.textContent = '...';
-
-  try {
-    // جلب بيانات المبيعات من التخزين المحلي (المحدث من Supabase)
-    let salesData = store.sales || [];
-    if (!salesData.length) {
-      salesData = await API.sales.list(store._state.currentDate);
-      store.set('sales', salesData);
-    }
-
-    // فلترة: المبيعات الآجلة فقط (غير نقدية) والتي لها عميل
-    const creditSales = salesData.filter(s => !s.is_cash && s.customer_id);
-
-    // تحديث الشارة بالتاريخ الحالي
-    if (badge) badge.textContent = new Date(store._state.currentDate).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
-
-    if (!creditSales.length) {
-      container.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px">لا توجد ترحيلات اليوم</p>';
-      return;
-    }
-
-    // تجميع المبيعات حسب العميل
-    const grouped = {};
-    creditSales.forEach(s => {
-      if (!grouped[s.customer_id]) {
-        grouped[s.customer_id] = {
-          customerName: s.customer?.name || 'عميل',
-          customerPhone: s.customer?.phone || '',
-          items: [],
-          total: 0
-        };
-      }
-      grouped[s.customer_id].items.push(s);
-      grouped[s.customer_id].total += parseFloat(s.total_amount || 0);
-    });
-
-    // بناء واجهة العرض بنفس هيكل النظام القديم
-    const ids = Object.keys(grouped);
-    container.innerHTML = ids.map(cid => {
-      const group = grouped[cid];
-      const rows = group.items.map(t => `
-        <tr>
-          <td style="padding:5px;font-weight:700">${t.product?.name || 'صنف'}</td>
-          <td style="padding:5px">${N(t.quantity || 0)}</td>
-          <td style="padding:5px">${t.weight_kg ? N(t.weight_kg) + ' ك' : '-'}</td>
-          <td style="padding:5px">${N(t.unit_price)} جنيه</td>
-          <td style="padding:5px;font-weight:900;color:var(--green)">${N(t.total_amount)} جنيه</td>
-        </tr>
-      `).join('');
-
-      return `
-        <div style="background:#fff;border:1.5px solid #d6eaf8;border-radius:10px;margin-bottom:8px;overflow:hidden;">
-          <div style="padding:9px 12px;background:var(--blue-light);display:flex;align-items:center;gap:8px;cursor:pointer"
-            onclick="let el=this.nextElementSibling; el.style.display = el.style.display==='none'?'block':'none';">
-            <span>👤</span>
-            <span style="font-weight:800;color:var(--blue)">${group.customerName}</span>
-            <span style="margin-right:auto;font-weight:900;color:var(--blue)">يومية: ${N(group.total)} جنيه</span>
-            <span>▼</span>
-          </div>
-          <div style="display:none;padding:10px 12px;border-top:1.5px solid #d6eaf8">
-            <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
-              <thead><tr style="background:#f0f7f0"><th>الصنف</th><th>عدد</th><th>وزن(ك)</th><th>سعر</th><th>المبلغ</th></tr></thead>
-              <tbody>${rows}</tbody>
-              <tfoot><tr style="background:#eafaf1;font-weight:900">
-                <td colspan="4" style="text-align:right;padding:5px">إجمالي اليومية</td>
-                <td style="padding:5px;color:var(--green)">${N(group.total)} جنيه</td>
-              </tr></tfoot>
-            </table>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-  } catch (e) {
-    AppError.log('renderTarhil', e);
-    container.innerHTML = '<p style="text-align:center;color:var(--red);padding:24px">⚠️ تعذر تحميل الترحيلات</p>';
+  const today = store._state.currentDate;
+  // المبيعات الآجلة (غير نقدية) لهذا اليوم
+  const sales = (store.sales || []).filter(s => s.sale_date === today && !s.is_cash);
+  if (!sales.length) {
+    container.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px">لا توجد ترحيلات اليوم</p>';
+    return;
   }
+  // تجميع حسب العميل
+  const grouped = {};
+  for (const sale of sales) {
+    if (!grouped[sale.customer_id]) grouped[sale.customer_id] = [];
+    grouped[sale.customer_id].push(sale);
+  }
+  let html = '';
+  for (const [custId, items] of Object.entries(grouped)) {
+    const customer = store.custs.find(c => c.id === custId);
+    const total = items.reduce((sum, s) => sum + s.total_amount, 0);
+    html += `<div class="tarhil-card" style="background:#fff;border:1.5px solid #d6eaf8;border-radius:10px;margin-bottom:8px;overflow:hidden;cursor:pointer;" onclick="toggleTarhilDetails(this)">
+      <div style="padding:9px 12px;background:var(--blue-light);display:flex;align-items:center;gap:8px">
+        <span>👤</span>
+        <span style="font-weight:800;color:var(--blue)">${customer ? customer.name : 'عميل محذوف'}</span>
+        <span style="margin-right:auto;font-weight:900;color:var(--blue)">يومية: ${N(total)} جنيه</span>
+        <span>▼</span>
+      </div>
+      <div class="tarhil-details" style="display:none;padding:10px 12px;border-top:1.5px solid #d6eaf8">
+        <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+          <thead><tr style="background:#f0f7f0"><th>الصنف</th><th>عدد</th><th>وزن(ك)</th><th>سعر</th><th>المبلغ</th></tr></thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
+                <td style="padding:5px;font-weight:700">${item.product?.name || '-'}</td>
+                <td style="padding:5px">${item.quantity || '-'}</td>
+                <td style="padding:5px">${item.weight_kg || '-'}</td>
+                <td style="padding:5px">${N(item.unit_price)} جنيه</td>
+                <td style="padding:5px;font-weight:900;color:var(--green)">${N(item.total_amount)} جنيه</td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot><tr style="background:#eafaf1;font-weight:900">
+            <td colspan="4" style="text-align:right;padding:5px">إجمالي اليومية</td>
+            <td style="padding:5px;color:var(--green)">${N(total)} جنيه</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+  }
+  container.innerHTML = html;
 }
 
-// دالة مساعدة: الانتقال ليوم سابق (للتوافق مع الكود القديم)
-async function goToTarhilDate(date) {
-  store.set('currentDate', date);
-  updateDates();
-  await loadTodayData();
-  renderTarhil();
-  
-  // تفعيل التبويب
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-tarhil').classList.add('active');
-  document.querySelector('[data-page="tarhil"]')?.classList.add('active');
+function toggleTarhilDetails(el) {
+  const details = el.querySelector('.tarhil-details');
+  if (details) details.style.display = details.style.display === 'none' ? 'block' : 'none';
+}
+
+// دالة للانتقال إلى صفحة الترحيلات بتاريخ معين (تستخدم من صفحة العميل)
+function goToTarhilDate(date) {
+  // تحديث التاريخ الحالي في store
+  store._state.currentDate = date;
+  updateDates();      // تحديث شريط التاريخ في الهيدر
+  showPage('tarhil', document.querySelector('[data-page="tarhil"]'));
+  renderTarhil();     // إعادة تحميل الترحيلات
 }
