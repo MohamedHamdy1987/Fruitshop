@@ -1,41 +1,38 @@
 // ============================================================
 // js/data.js — طبقة البيانات والحالة المركزية
+// تم التحديث للمشروع الجديد على Supabase
 // ============================================================
 
 // ─────────────────────────────────────────────────────────────
-// Supabase Client
+// Supabase Client — بيانات المشروع الجديد
 // ─────────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://rfrrtfjbaeflyrbavbrg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmcnJ0ZmpiYWVmbHlyYmF2YnJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3Njk3NjYsImV4cCI6MjA5MTM0NTc2Nn0.K9Ho5imrtVUVEv0PiZObAYKIbmfBB2d6C9azv5wqAGw';
+const SUPABASE_URL = 'https://clwedhwbwcdjmnzvlkwo.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNsd2VkaHdid2Nkam1uenZsa3dvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5OTI3NjMsImV4cCI6MjA5MTU2ODc2M30.r6T-eiH4AVlW5VV_6yl2JVBljl7Jj262hkFdfIM2Wg0';
+
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ─────────────────────────────────────────────────────────────
 // الحالة العامة للمستخدم
 // ─────────────────────────────────────────────────────────────
-let currentUser = null;  // { id, email, company_id, role, company_name, ... }
+let currentUser = null;
 
 // ─────────────────────────────────────────────────────────────
 // State Manager — البيانات المحلية المؤقتة (للأداء)
-// البيانات الرئيسية الآن في قاعدة البيانات
-// هذا فقط للـ cache والعمل offline
 // ─────────────────────────────────────────────────────────────
 const store = {
   _state: {
-    // بيانات مؤقتة في الذاكرة (تُحمَّل من DB)
-    inventory:    [],   // incoming_batches النشطة
+    inventory:    [],
     customers:    [],
     suppliers:    [],
     products:     [],
     employees:    [],
     partners:     [],
     shops:        [],
-    sales:        [],   // مبيعات اليوم
-    payments:     [],   // مدفوعات اليوم
+    sales:        [],
+    payments:     [],
     invoices:     [],
-
-    // حالة الواجهة
     currentDate:  new Date().toISOString().slice(0,10),
-    activeProduct: null,  // بدل xProd
+    activeProduct: null,
     isLoading:    false,
     lastSync:     null
   },
@@ -73,12 +70,11 @@ const store = {
     this._state.sales      = [];
     this._state.payments   = [];
     this._state.invoices   = [];
-    Cache.clear();
+    if (typeof Cache !== 'undefined') Cache.clear();
   }
 };
 
-// اختصار للتوافق مع الكود القديم
-// S الآن يشير لـ store._state مباشرة
+// للتوافق مع الكود القديم
 const S = store._state;
 
 // ─────────────────────────────────────────────────────────────
@@ -88,7 +84,7 @@ const AppError = {
   log(context, error, notifyUser = false) {
     const msg = error?.message || String(error);
     console.error(`[${context}]`, msg, error);
-    if (notifyUser) Toast.error(`خطأ: ${msg}`);
+    if (notifyUser && typeof Toast !== 'undefined') Toast.error(`خطأ: ${msg}`);
   },
 
   async handle(context, fn) {
@@ -153,7 +149,6 @@ async function loadAppData() {
   syncUI.setStatus('saving', 'جاري تحميل البيانات...');
 
   try {
-    // تحميل البيانات الأساسية بالتوازي
     const [
       customers, suppliers, products,
       employees, partners, shops, invoices
@@ -175,7 +170,6 @@ async function loadAppData() {
     store.set('shops',     shops     || []);
     store.set('invoices',  invoices  || []);
 
-    // تحميل بيانات اليوم
     await loadTodayData();
 
     store._state.lastSync = new Date().toISOString();
@@ -253,5 +247,5 @@ const RBAC = {
 // ─────────────────────────────────────────────────────────────
 function refreshLocal(key, newData) {
   store.set(key, newData);
-  Cache.invalidate(key);
+  if (typeof Cache !== 'undefined') Cache.invalidate(key);
 }
