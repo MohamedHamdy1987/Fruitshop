@@ -175,23 +175,38 @@ async function renderSalesTable() {
 // goToProduct — الانتقال للمبيعات وفتح دفعة محددة
 // ─────────────────────────────────────────────────────────────
 function goToProduct(batchId) {
+  // ✅ رسالة فورية تخبرك إن الزرار اشتغل
+  Toast.info('🔄 جاري فتح الدفعة: ' + batchId);
+
   if (!batchId) {
-    Toast.warning('لا يوجد رقم دفعة صالح');
+    Toast.error('❌ خطأ: رقم الدفعة مفقود');
     return;
   }
-  
-  const batch = (store.inv || []).find(b => b.batch_id === batchId);
+
+  // ✅ بحث آمن يعمل حتى لو الأرقام كنصوص
+  const batch = (store.inv || []).find(b => String(b.batch_id) === String(batchId));
   if (!batch) {
-    Toast.error('الدفعة غير موجودة في المخزون');
+    Toast.error('❌ الدفعة غير موجودة في المخزون');
     return;
   }
-  
+
+  // ✅ تأكد إن دالة التنقل موجودة قبل الاستدعاء
+  if (typeof showPage !== 'function') {
+    Toast.error('❌ خطأ في النظام: ملف app.js غير محمّل');
+    return;
+  }
+
+  // ✅ التنفيذ الفعلي
   _activeBatchId = batchId;
   showPage('sales', document.querySelector('[data-page="sales"]'));
-  
+
+  // ✅ فتح التفاصيل بعد رندر الصفحة
   setTimeout(() => {
-    toggleBatch(batchId);
-  }, 100);
+    if (typeof toggleBatch === 'function') {
+      toggleBatch(batchId);
+      Toast.success('✅ تم فتح الدفعة بنجاح');
+    }
+  }, 300);
 }
 
 // ─────────────────────────────────────────────────────────────// toggleBatch — فتح/إغلاق تفاصيل الدفعة
