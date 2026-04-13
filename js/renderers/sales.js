@@ -2,9 +2,16 @@
 // js/renderers/sales.js — صفحة المبيعات
 // workflow السوق الحقيقي: عرض الدفعات + بيع مباشر من كل دفعة
 // يعتمد على: incoming_batches (store.inv) + daily_sales (API)
-// لا يستخدم S.products أو S.tarhilLog
 // ============================================================
 
+// ─────────────────────────────────────────────────────────────
+// حالة الصفحة المحلية (UI فقط)
+// ─────────────────────────────────────────────────────────────
+let _activeBatchId = null;
+
+// ─────────────────────────────────────────────────────────────
+// renderSalesTable — نقطة الدخول الرئيسية (مُحسّنة)
+// ─────────────────────────────────────────────────────────────
 async function renderSalesTable() {
   const tbody = document.getElementById('sales-tbody');
   if (!tbody) return;
@@ -24,7 +31,6 @@ async function renderSalesTable() {
   // 4️⃣ لو فيه دفعات في المبيعات مش موجودة في المخزون (خلصت)، نبني بيانات مؤقتة
   batchIdsFromSales.forEach(bid => {
     if (!batchMap.has(bid)) {
-      // نبني دفعة وهمية من أول بيع
       const batchSales = sales.filter(s => s.batch_id === bid);
       const firstSale = batchSales[0];
       const totalQty = batchSales.reduce((sum, s) => sum + parseFloat(s.quantity || 0), 0);
@@ -32,17 +38,16 @@ async function renderSalesTable() {
       
       batchMap.set(bid, {
         batch_id: bid,
-        product_name: firstSale.product?.name || 'منتج',
+        product_name: firstSale?.product?.name || 'منتج',
         supplier_name: '-',
-        unit: firstSale.product?.unit || 'وحدة',
+        unit: firstSale?.product?.unit || 'وحدة',
         remaining_qty: 0,
         original_qty: totalQty + totalWeight,
-        batch_date: firstSale.sale_date || store._state.currentDate,
+        batch_date: firstSale?.sale_date || store._state.currentDate,
         carryover_from: null,
         cost_per_unit: 0
       });
-    }
-  });
+    }  });
   
   // 5️⃣ نحول الـ Map لقائمة
   const displayBatches = Array.from(batchMap.values());
@@ -54,6 +59,7 @@ async function renderSalesTable() {
     _updateDayTotal(sales);
     return;
   }
+
   let html = '';
   displayBatches.forEach(batch => {
     const batchSales  = sales.filter(s => s.batch_id === batch.batch_id);
@@ -90,8 +96,7 @@ async function renderSalesTable() {
       <td style="padding:7px 5px;text-align:center;font-weight:800;color:${isDone ? 'var(--red)' : 'var(--blue)'}">
         ${N(remQty)} ${isDone ? '✅' : ''}
       </td>
-      <td style="padding:7px 5px;text-align:center;font-weight:900;color:var(--green)">
-        ${N(batchTotal)} ج
+      <td style="padding:7px 5px;text-align:center;font-weight:900;color:var(--green)">        ${N(batchTotal)} ج
       </td>
       <td style="padding:7px 5px;text-align:center">
         ${isOpen ? '▲' : '▼'}
@@ -103,7 +108,8 @@ async function renderSalesTable() {
 
     if (isOpen) {
       const salesRows = batchSales.map(sl => {
-        const cust   = sl.customer?.name || (store.custs||[]).find(c=>c.id===sl.customer_id)?.name;        const isCash = sl.is_cash || !sl.customer_id;
+        const cust   = sl.customer?.name || (store.custs||[]).find(c=>c.id===sl.customer_id)?.name;
+        const isCash = sl.is_cash || !sl.customer_id;
         return `<tr style="background:#f8fff8;font-size:.79rem">
           <td style="padding:4px 6px">${sl.quantity > 0 ? N(sl.quantity) : '-'}</td>
           <td style="padding:4px 6px">
@@ -138,27 +144,57 @@ async function renderSalesTable() {
           <table style="width:100%;border-collapse:collapse;font-size:.79rem;margin-bottom:8px">
             <thead>
               <tr style="background:#e8f8ee">
-                <th style="padding:4 ─────────────────────────────────────────────────────────────
-// حالة الصفحة المحلية (UI فقط — لا بيانات عمل)
-// ─────────────────────────────────────────────────────────────
-let _activeBatchId = null;   // الدفعة المفتوحة حالياً
+                <th style="padding:4px 6px">عدد</th>
+                <th style="padding:4px 6px">العميل</th>                <th style="padding:4px 6px">وزن</th>
+                <th style="padding:4px 6px">سعر</th>
+                <th style="padding:4px 6px">المبلغ</th>
+                <th style="padding:4px 6px"></th>
+              </tr>
+            </thead>
+            <tbody>${salesRows}</tbody>
+            <tfoot>
+              <tr style="background:#eafaf1;font-weight:900">
+                <td colspan="4" style="text-align:right;padding:5px;color:var(--green)">الإجمالي</td>
+                <td style="padding:5px;color:var(--green)">${N(batchTotal)} ج</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>` : '<p style="color:#aaa;text-align:center;padding:8px 0">لا توجد مبيعات على هذه الدفعة</p>'}
 
-// ─────────────────────────────────────────────────────────────
-// ───────────────────────────────────── ─────────────────────────────────────────────────────────────
-// helpers
-// ─────────────────────────────────────────────────────────────
-function _hasSalesToday(batchId) {
-  return (store.sales||[]).some(s => s.batch_id === batchId);
+          <div id="sf-${batch.batch_id}"></div>
+        </div>
+      </td></tr>`;
+    }
+  });
+
+  tbody.innerHTML = html;
+  _updateDayTotal(sales);
 }
 
-function _updateDayTotal(sales) {
-  const total = (sales||[]).reduce((s,x) => s + parseFloat(x.total_amount||0), 0);
-  const el = document.getElementById('day-total');
-  if (el) el.textContent = N(total) + ' جنيه';
+// ─────────────────────────────────────────────────────────────
+// goToProduct — الانتقال للمبيعات وفتح دفعة محددة
+// ─────────────────────────────────────────────────────────────
+function goToProduct(batchId) {
+  if (!batchId) {
+    Toast.warning('لا يوجد رقم دفعة صالح');
+    return;
+  }
+  
+  const batch = (store.inv || []).find(b => b.batch_id === batchId);
+  if (!batch) {
+    Toast.error('الدفعة غير موجودة في المخزون');
+    return;
+  }
+  
+  _activeBatchId = batchId;
+  showPage('sales', document.querySelector('[data-page="sales"]'));
+  
+  setTimeout(() => {
+    toggleBatch(batchId);
+  }, 100);
 }
 
-// ─────────────────────────────────────────────────────────────
-// toggleBatch — فتح/إغلاق تفاصيل الدفعة
+// ─────────────────────────────────────────────────────────────// toggleBatch — فتح/إغلاق تفاصيل الدفعة
 // ─────────────────────────────────────────────────────────────
 function toggleBatch(batchId) {
   _activeBatchId = _activeBatchId === batchId ? null : batchId;
@@ -172,7 +208,6 @@ function openInlineSaleForm(batchId) {
   const d = document.getElementById('sf-' + batchId);
   if (!d) return;
 
-  // toggle: لو مفتوح، أغلقه
   if (d.innerHTML.trim()) { d.innerHTML = ''; return; }
 
   const batch = (store.inv||[]).find(b => b.batch_id === batchId);
@@ -195,257 +230,4 @@ function openInlineSaleForm(batchId) {
       </div>
       <div>
         <label class="lbl">وزن (كيلو)</label>
-        <input type="number" id="sf-wt-${batchId}" placeholder="0" min="0" step="0.01"
-          oninput="calcSF('${batchId}')">
-      </div>
-      <div>
-        <label class="lbl">سعر الوحدة</label>
-        <input type="number" id="sf-price-${batchId}" placeholder="0" min="0"
-          oninput="calcSF('${batchId}')">
-      </div>
-      <div>
-        <label class="lbl">الإجمالي</label>
-        <input type="number" id="sf-tot-${batchId}" readonly placeholder="0"
-          style="background:#e8f8f0;font-weight:800;color:var(--green)">
-      </div>
-      <div style="grid-column:1/-1">
-        <label class="lbl">العميل</label>
-        <select id="sf-cust-${batchId}" style="width:100%">${custOpts}</select>
-      </div>
-    </div>
-    <div style="display:flex;gap:7px">
-      <button class="btn btn-g btn-sm" onclick="confirmInlineSale('${batchId}',${maxQty})">✅ تأكيد</button>
-      <button class="btn btn-gr btn-sm" onclick="document.getElementById('sf-${batchId}').innerHTML=''">إلغاء</button>
-    </div>
-    <div style="font-size:.72rem;color:var(--gray);margin-top:6px">
-      متبقي في المخزون: <strong style="color:var(--blue)">${N(maxQty)} ${unit}</strong>
-    </div>
-  </div>`;
-}
-
-// ─────────────────────────────────────────────────────────────
-// calcSF — حساب الإجمالي تلقائياً
-// ─────────────────────────────────────────────────────────────
-function calcSF(batchId) {
-  const qty   = parseFloat(document.getElementById(`sf-qty-${batchId}`)?.value)   || 0;
-  const wt    = parseFloat(document.getElementById(`sf-wt-${batchId}`)?.value)    || 0;
-  const price = parseFloat(document.getElementById(`sf-price-${batchId}`)?.value) || 0;
-  const tot   = document.getElementById(`sf-tot-${batchId}`);
-  if (tot) tot.value = ((wt > 0 ? wt : qty) * price) || '';
-}
-
-// ─────────────────────────────────────────────────────────────
-// confirmInlineSale — تأكيد البيع
-// ─────────────────────────────────────────────────────────────
-async function confirmInlineSale(batchId, maxQty) {
-  const batch  = (store.inv||[]).find(b => b.batch_id === batchId);
-  if (!batch) return;
-
-  const qty    = parseFloat(document.getElementById(`sf-qty-${batchId}`)?.value)   || 0;
-  const wt     = parseFloat(document.getElementById(`sf-wt-${batchId}`)?.value)    || 0;
-  const price  = parseFloat(document.getElementById(`sf-price-${batchId}`)?.value) || 0;
-  const custId = document.getElementById(`sf-cust-${batchId}`)?.value || '';
-  const units  = wt > 0 ? wt : qty;
-
-  if (!units || !price) return Toast.warning('أدخل الكمية والسعر');
-  if (qty > 0 && qty > maxQty) return Toast.error(`الكمية (${qty}) أكبر من المتبقي (${N(maxQty)} ${batch.unit})`);
-
-  const total = units * price;
-
-  const btn = document.querySelector(`#sf-${batchId} .btn-g`);
-  if (btn) { btn.disabled = true; btn.textContent = '...'; }
-
-  try {
-    await API.sales.add({
-      customerId: custId || null,
-      productId:  batch.product_id,
-      batchId:    batchId,
-      quantity:   qty || 0,
-      weightKg:   wt  || 0,
-      unitPrice:  price,
-      total,
-      isCash:     !custId,
-      date:       store._state.currentDate
-    });
-
-    // تحديث المخزون والمبيعات من DB
-    const [inventory, sales] = await Promise.all([
-      API.inventory.list(),
-      API.sales.list(store._state.currentDate)
-    ]);
-    store.set('inventory', inventory);
-    store.set('sales',     sales);
-
-    // تحديث رصيد العميل محلياً (سريع — DB trigger يُحدّث الرسمي)
-    if (custId) {
-      const idx = (store.custs||[]).findIndex(c => c.id === custId);
-      if (idx >= 0) store._state.customers[idx].balance = (store._state.customers[idx].balance || 0) + total;
-    }
-
-    const custName = custId
-      ? (store.custs||[]).find(c=>c.id===custId)?.name || 'العميل'
-      : 'نقدي';
-    Toast.success(`✅ ${N(total)} ج — ${batch.product_name} → ${custName}`);
-
-    // إعادة رسم الصفحة مع إبقاء الدفعة مفتوحة
-    renderSalesTable();
-
-  } catch(e) {
-    AppError.log('confirmInlineSale', e, true);
-    if (btn) { btn.disabled = false; btn.textContent = '✅ تأكيد'; }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// deleteSaleLine — حذف بيعة واحدة
-// ─────────────────────────────────────────────────────────────
-async function deleteSaleLine(saleId, batchId) {
-  if (!confirm('حذف هذه البيعة؟')) return;
-  try {
-    await API.sales.delete(saleId);
-    const [inventory, sales] = await Promise.all([
-      API.inventory.list(),
-      API.sales.list(store._state.currentDate)
-    ]);
-    store.set('inventory', inventory);
-    store.set('sales',     sales);
-    // إعادة رسم مع إبقاء الدفعة مفتوحة
-    _activeBatchId = batchId;
-    renderSalesTable();
-    Toast.success('تم حذف البيعة');
-  } catch(e) { AppError.log('deleteSaleLine', e, true); }
-}
-
-// ─────────────────────────────────────────────────────────────
-// deleteBatchFromSales — حذف دفعة كاملة
-// ─────────────────────────────────────────────────────────────
-async function deleteBatchFromSales(batchId) {
-  const batch = (store.inv||[]).find(b => b.batch_id === batchId);
-  if (!confirm(`حذف دفعة "${batch?.product_name}"؟\nسيتم حذف الدفعة من المخزون.`)) return;
-  try {
-    await sb.from('incoming_batches')
-      .delete()
-      .eq('id', batchId)
-      .eq('company_id', currentUser.company_id);
-
-    const [inventory, sales] = await Promise.all([
-      API.inventory.list(),
-      API.sales.list(store._state.currentDate)
-    ]);
-    store.set('inventory', inventory);
-    store.set('sales',     sales);
-    if (_activeBatchId === batchId) _activeBatchId = null;
-    renderSalesTable();
-    Toast.success('تم حذف الدفعة');
-  } catch(e) { AppError.log('deleteBatchFromSales', e, true); }
-}
-// ─────────────────────────────────────────────────────────────
-// goToProduct — الانتقال للمبيعات وفتح دفعة محددة
-// ─────────────────────────────────────────────────────────────
-function goToProduct(batchId) {
-  if (!batchId) {
-    Toast.warning('لا يوجد رقم دفعة صالح');
-    return;
-  }
-  
-  // التأكد من وجود الدفعة في المخزون
-  const batch = (store.inv || []).find(b => b.batch_id === batchId);
-  if (!batch) {
-    Toast.error('الدفعة غير موجودة في المخزون');
-    return;
-  }
-  
-  // تعيين الدفعة النشطة
-  _activeBatchId = batchId;
-  
-  // الانتقال لصفحة المبيعات
-  showPage('sales', document.querySelector('[data-page="sales"]'));
-  
-  // فتح تفاصيل الدفعة تلقائياً بعد render
-  setTimeout(() => {
-    toggleBatch(batchId);
-  }, 100);
-}
-
-// ─────────────────────────────────────────────────────────────
-// closeDay — إغلاق اليوم وترحيل المتبقيات
-// ─────────────────────────────────────────────────────────────
-async function closeDay() {
-  const remaining = (store.inv||[]).filter(b => parseFloat(b.remaining_qty) > 0);
-  if (!remaining.length) {
-    Toast.info('لا توجد بضاعة متبقية للترحيل');
-    return;
-  }
-
-  const newDate = prompt('تاريخ اليوم الجديد (YYYY-MM-DD):', _nextDay(store._state.currentDate));
-  if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate.trim())) {
-    if (newDate) Toast.warning('صيغة التاريخ يجب أن تكون YYYY-MM-DD');
-    return;
-  }
-
-  if (!confirm(`ترحيل ${remaining.length} دفعة متبقية ليوم ${newDate}؟`)) return;
-
-  try {
-    // ترحيل كل دفعة
-    await Promise.all(remaining.map(b =>
-      API.inventory.carryOver(b.batch_id, parseFloat(b.remaining_qty), newDate.trim())
-    ));
-
-    store.set('currentDate', newDate.trim());
-    updateDates();
-
-    const [inventory, sales, payments] = await Promise.all([
-      API.inventory.list(),
-      API.sales.list(newDate.trim()),
-      API.payments.list(newDate.trim())
-    ]);
-    store.set('inventory', inventory);
-    store.set('sales',     sales);
-    store.set('payments',  payments);
-
-    _activeBatchId = null;
-    renderSalesTable();
-    Toast.success(`✅ تم إغلاق اليوم — رُحِّل ${remaining.length} دفعة`);
-  } catch(e) { AppError.log('closeDay', e, true); }
-}
-
-function _nextDay(dateStr) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0,10);
-}
-
-// ─────────────────────────────────────────────────────────────
-// goToProduct — الانتقال للمبيعات وفتح دفعة محددة
-// ─────────────────────────────────────────────────────────────
-function goToProduct(batchId) {
-  if (!batchId) {
-    Toast.warning('لا يوجد رقم دفعة صالح');
-    return;
-  }
-  
-  // التأكد من وجود الدفعة في المخزون
-  const batch = (store.inv || []).find(b => b.batch_id === batchId);
-  if (!batch) {
-    Toast.error('الدفعة غير موجودة في المخزون');
-    return;
-  }
-  
-  // تعيين الدفعة النشطة
-  _activeBatchId = batchId;
-  
-  // الانتقال لصفحة المبيعات
-  showPage('sales', document.querySelector('[data-page="sales"]'));
-  
-  // فتح تفاصيل الدفعة تلقائياً بعد render
-  setTimeout(() => {
-    toggleBatch(batchId);
-  }, 100);
-}
-// ─────────────────────────────────────────────────────────────
-// للتوافق مع goToProduct في الكود القديم (من nazil)
-// ─────────────────────────────────────────────────────────────
-function goToProduct(batchId) {
-  _activeBatchId = batchId;
-  showPage('sales', document.querySelector('[data-page=sales]'));
-}
+        <input type="number" id="sf-wt-${batchId}" placeholder="0" min="0"
