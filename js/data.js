@@ -103,32 +103,35 @@ async function loadTodayData() {
 
 async function loadUserProfile() {
   try {
-    const profile = await API.company.getProfile();
-    if (profile) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+
+    // محاولة جلب البروفايل
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('*, company:companies(*)')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profile && profile.company_id) {
       currentUser.company_id = profile.company_id;
       currentUser.role = profile.role;
-      currentUser.full_name = profile.full_name;
       currentUser.company_name = profile.company?.name;
-      currentUser.subscription = profile.company?.subscription;
-      currentUser.trial_ends = profile.company?.trial_ends;
-      currentUser.sub_ends = profile.company?.sub_ends;
     } else {
-      // محاولة بديلة: جلب company_id مباشرة
-      const { data: prof } = await sb.from('profiles').select('company_id').eq('id', currentUser.id).single();
-      if (prof) currentUser.company_id = prof.company_id;
+      // "خطة الطوارئ" إذا لم يجد شركة: استخدم المعرف الافتراضي (الأصفار) الذي أنشأناه في الـ SQL
+      console.log("استخدام معرف الشركة الافتراضي...");
+      currentUser.company_id = '00000000-0000-0000-0000-000000000000';
+      currentUser.role = 'owner';
     }
-  } catch(e) { AppError.log('loadUserProfile', e); }
+    
+    // حفظ المعرف في المتصفح للضمان
+    localStorage.setItem('last_company_id', currentUser.company_id);
+    
+  } catch(e) { 
+    console.error('Error loading profile:', e);
+    // محاولة أخيرة من الـ localStorage
+    currentUser.company_id = localStorage.getItem('last_company_id') || '00000000-0000-0000-0000-000000000000';
+  }
 }
-
-const RBAC = {
-  can(action) {
-    const role = currentUser?.role;
-    if (!role) return false;
-    const permissions = { owner: ['*'], admin: ['read','write','delete','manage_employees','manage_partners'], accountant: ['read','write','invoices','payments','reports'], worker: ['read','sales','inventory_add'] };
-    const perms = permissions[role] || [];
-    return perms.includes('*') || perms.includes(action);
-  },
-  requireRole(roles, action) { if (!this.can(action)) { Toast.error('ليس لديك صلاحية'); return false; } return true; }
-};
 
 function refreshLocal(key, newData) { store.set(key, newData); if (typeof Cache !== 'undefined') Cache.invalidate(key); }
