@@ -106,7 +106,8 @@ async function loadUserProfile() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return;
 
-    // محاولة جلب البروفايل
+    currentUser = user; // تحديث بيانات المستخدم الحالي
+
     const { data: profile } = await sb
       .from('profiles')
       .select('*, company:companies(*)')
@@ -116,21 +117,31 @@ async function loadUserProfile() {
     if (profile && profile.company_id) {
       currentUser.company_id = profile.company_id;
       currentUser.role = profile.role;
-      currentUser.company_name = profile.company?.name;
     } else {
-      // "خطة الطوارئ" إذا لم يجد شركة: استخدم المعرف الافتراضي (الأصفار) الذي أنشأناه في الـ SQL
-      console.log("استخدام معرف الشركة الافتراضي...");
+      // المعرف الافتراضي الذي أنشأناه في SQL
       currentUser.company_id = '00000000-0000-0000-0000-000000000000';
-      currentUser.role = 'owner';
     }
-    
-    // حفظ المعرف في المتصفح للضمان
-    localStorage.setItem('last_company_id', currentUser.company_id);
-    
+
+    // 🔥 الأهم: جلب البيانات فوراً من السحاب بعد تحديد الشركة
+    console.log("جاري مزامنة البيانات من السحاب...");
+    const [custs, supps, inv, prods, sales] = await Promise.all([
+      API.customers.list(),
+      API.suppliers.list(),
+      API.inventory.list(),
+      API.products.list(),
+      API.sales.list(store._state.currentDate)
+    ]);
+
+    // تخزينها في الـ Store لتعرض في الشاشات
+    store.set('customers', custs || []);
+    store.set('suppliers', supps || []);
+    store.set('inventory', inv || []);
+    store.set('products',  prods || []);
+    store.set('sales',     sales || []);
+
+    console.log("✅ تمت المزامنة بنجاح!");
   } catch(e) { 
-    console.error('Error loading profile:', e);
-    // محاولة أخيرة من الـ localStorage
-    currentUser.company_id = localStorage.getItem('last_company_id') || '00000000-0000-0000-0000-000000000000';
+    console.error('فشل المزامنة:', e);
   }
 }
 
