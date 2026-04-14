@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VegERP — نظام إدارة تجارة الخضار والفواكه بالجملة</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===== شاشة التحميل ===== -->
+<div class="loading" id="loading">
+  <div class="loading-inner">
+    <div class="emoji">🥦</div>
+    <div style="font-size:1.1rem;font-weight:700;margin-top:10px">جاري التحميل...</div>
+  </div>
+</div>
+
+<!-- ===== شاشة تسجيل الدخول ===== -->
+<div class="auth-wrap" id="auth-screen" style="display:none;">
+  <div class="auth-box">
+    <div class="auth-logo">🥦</div>
+    <div class="auth-title">نظام محل الخضار والفواكه</div>
+    <div class="auth-sub">إدارة متكاملة لمحلك التجاري</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">تسجيل الدخول</button>
+      <button class="auth-tab"        onclick="switchAuthTab('register')">حساب جديد</button>
+    </div>
+    <div class="auth-err" id="auth-err"></div>
+    <!-- نموذج الدخول -->
+    <div id="login-form">
+      <div class="auth-field"><label>البريد الإلكتروني</label><input type="email" id="login-email" placeholder="example@email.com"></div>
+      <div class="auth-field"><label>كلمة المرور</label><input type="password" id="login-pass" placeholder="••••••••"></div>
+      <button class="auth-btn" onclick="doLogin()" id="login-btn">🔑 دخول</button>
+    </div>
+    <!-- نموذج التسجيل -->
+    <div id="register-form" style="display:none;">
+      <div class="auth-field"><label>اسم المحل</label><input type="text" id="reg-shop" placeholder="مثال: محل أبو أحمد"></div>
+      <div class="auth-field"><label>البريد الإلكتروني</label><input type="email" id="reg-email" placeholder="example@email.com"></div>
+      <div class="auth-field"><label>كلمة المرور</label><input type="password" id="reg-pass" placeholder="٨ أحرف على الأقل"></div>
+      <div class="auth-field"><label>تأكيد كلمة المرور</label><input type="password" id="reg-pass2" placeholder="••••••••"></div>
+      <button class="auth-btn" onclick="doRegister()" id="reg-btn">✅ إنشاء حساب مجاني (١٤ يوم)</button>
+      <p style="text-align:center;font-size:0.78rem;color:var(--gray);margin-top:10px;">تجربة مجانية ١٤ يوم — لا يلزم بطاقة بنكية</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== التطبيق الرئيسي ===== -->
+<div id="app">
+  <!-- شريط التجربة المجانية -->
+  <div class="trial-banner" id="trial-banner" style="display:none;">
+    ⏳ <span id="trial-text"></span> —
+    <span style="text-decoration:underline;cursor:pointer;" onclick="showPage('subscription',null)">اشترك الآن</span>
+  </div>
+
+  <!-- الهيدر -->
+  <header>
+    <div class="header-top">
+      <span class="hlogo">🥦</span>
+      <div class="htitle">
+        <h1 id="shop-name-header">نظام المحل</h1>
+        <p>إدارة متكاملة · محفوظ على السحابة</p>
+      </div>
+      <div class="hright">
+        <div class="date-badge" onclick="changeDatePrompt()">📅 <span id="headerDate">-</span></div>
+        <div class="user-badge" onclick="showUserMenu()">👤 <span id="user-email-badge">-</span> <span id="user-role-badge"></span></div>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button data-page="dashboard"    onclick="showPage('dashboard',this)"    class="active">📊 الرئيسية</button>
+      <button data-page="inventory"    onclick="showPage('inventory',this)">📦 المخزون</button>
+      <button data-page="sales"        onclick="showPage('sales',this)">🛒 المبيعات</button>
+      <button data-page="tarhil"       onclick="showPage('tarhil',this)">📤 الترحيلات</button>
+      <button data-page="customers"    onclick="showPage('customers',this)">👤 العملاء</button>
+      <button data-page="suppliers"    onclick="showPage('suppliers',this)">🚛 الموردون</button>
+      <button data-page="invoices"     onclick="showPage('invoices',this)">🧾 الفواتير</button>
+      <button data-page="employees"    onclick="showPage('employees',this)">👷 الموظفون</button>
+      <button data-page="partners"     onclick="showPage('partners',this)">🤝 الشركاء</button>
+      <button data-page="shops"        onclick="showPage('shops',this)">🏬 المحلات</button>
+      <button data-page="khazna"       onclick="showPage('khazna',this)">🏦 الخزنة</button>
+      <button data-page="subscription" onclick="showPage('subscription',this)">💳 الاشتراك</button>
+      <button id="adminTabBtn" data-page="admin" onclick="showPage('admin',this)" style="display:none;">🛡️ المشرف</button>
+    </nav>
+  </header>
+
+  <!-- شريط المزامنة -->
+  <div class="sync-bar" id="sync-bar">
+    <div class="sync-dot"></div>
+    <span id="sync-text">محفوظ على السحابة ✓</span>
+  </div>
+
+  <!-- ===== صفحة Dashboard ===== -->
+  <div class="page active" id="page-dashboard">
+    <div id="dashboard-content">
+      <div class="kpi-row">
+        <div class="kpi-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="kpi-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="kpi-card"><div class="skeleton" style="height:80px"></div></div>
+        <div class="kpi-card"><div class="skeleton" style="height:80px"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة المخزون (النازل + الباقي معاً) ===== -->
+  <div class="page" id="page-inventory">
+    <div id="inventory-content">
+      <div class="card"><div class="cb"><div class="skeleton" style="height:200px"></div></div></div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الباقي (للتوافق — تُعرض نفس inventory) ===== -->
+  <div class="page" id="page-baqi">
+    <div id="inventory-content-baqi">
+      <div class="card"><div class="cb"><div class="skeleton" style="height:120px"></div></div></div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة النازل (للتوافق — تُعرض نفس inventory) ===== -->
+  <div class="page" id="page-nazil">
+    <div id="inventory-content-nazil">
+      <div class="card"><div class="cb"><div class="skeleton" style="height:120px"></div></div></div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة المبيعات ===== -->
+  <div class="page" id="page-sales">
+    <div class="card">
+      <div class="ch g">
+        <span>🛒</span>
+        <h2>مبيعات اليوم</h2>
+        <span class="cbadge g" id="sales-badge">-</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+          <thead>
+            <tr style="background:#f0f7f0;">
+              <th style="padding:8px 5px">📅 التاريخ</th>
+              <th style="padding:8px 5px">المورد</th>
+              <th style="padding:8px 5px">الصنف</th>
+              <th style="padding:8px 5px">الكمية</th>
+              <th style="padding:8px 5px">المباع</th>
+              <th style="padding:8px 5px">المتبقي</th>
+              <th style="padding:8px 5px">الإجمالي</th>
+              <th style="padding:8px 5px">▼</th>
+              <th style="padding:8px 5px"></th>
+            </tr>
+          </thead>
+          <tbody id="sales-tbody">
+            <tr><td colspan="9" style="color:#aaa;padding:22px;text-align:center">
+              جاري التحميل...
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cb" style="border-top:2px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;gap:7px;flex-wrap:wrap;">
+          <button class="btn btn-o" onclick="closeDay()">🌙 إغلاق اليوم</button>
+          <button class="btn btn-b no-print" onclick="window.print()">🖨️</button>
+        </div>
+        <div>إجمالي اليوم: <strong id="day-total" style="color:var(--green);">0 جنيه</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الترحيلات ===== -->
+  <div class="page" id="page-tarhil"><div id="tarhil-content"></div>
+    <div class="card">
+      <div class="ch" style="background:#fdf0e0;border-bottom-color:#f0c070;">
+        <span>📤</span>
+        <h2 style="color:#784212">الترحيلات</h2>
+        <span class="cbadge" style="background:#784212" id="tarhil-badge">-</span>
+      </div>
+      <!-- فلتر تاريخ -->
+      <div class="cb" style="border-bottom:1px solid var(--border);padding-bottom:10px">
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label class="lbl">عرض ترحيلات تاريخ</label>
+            <input type="date" id="tarhil-date-picker"
+              value="" style="direction:ltr;text-align:center">
+          </div>
+          <button class="btn btn-o btn-sm"
+            onclick="goToTarhilDate(document.getElementById('tarhil-date-picker').value||store._state.currentDate)">
+            🔍 عرض
+          </button>
+          <button class="btn btn-gr btn-sm"
+            onclick="goToTarhilDate(store._state.currentDate)">
+            اليوم
+          </button>
+        </div>
+      </div>
+      <div class="cb" id="tarhil-body">
+        <p style="text-align:center;color:#aaa;padding:24px">جاري التحميل...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة العملاء ===== -->
+  <div class="page" id="page-customers">
+    <div id="cust-list-view">
+      <div class="card">
+        <div class="ch b"><span>➕</span><h2 style="color:var(--blue)">إضافة عميل</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:120px;"><label class="lbl">الاسم</label><input type="text" id="nc-name" placeholder="اسم العميل"></div>
+            <div style="min-width:110px;"><label class="lbl">الهاتف</label><input type="text" id="nc-phone" placeholder="01xxxxxxxxx"></div>
+            <div style="min-width:105px;"><label class="lbl">رصيد مبدئي</label><input type="number" id="nc-balance" placeholder="0" min="0"></div>
+            <button class="btn btn-b" onclick="addCustomer()">➕ إضافة</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch b"><span>🔍</span><h2 style="color:var(--blue)">بحث</h2></div>
+        <div class="cb"><input type="text" id="searchCustomerInput" placeholder="ابحث بالاسم أو رقم الهاتف..." oninput="filterCustomersList()" style="text-align:right"></div>
+      </div>
+      <div id="cust-list-cont"></div>
+    </div>
+    <div id="cust-detail-view" style="display:none;">
+      <button class="back-btn" onclick="showCustList()">◀ رجوع</button>
+      <div class="card">
+        <div class="ch b" style="justify-content:space-between">
+          <span>👤</span>
+          <h2 id="cd-name" style="color:var(--blue)">-</h2>
+          <button class="btn" style="background:#25D366;color:#fff;" onclick="shareCustomerWhatsApp()">📱 واتساب</button>
+          <span class="cbadge b" id="cd-bal">0 جنيه</span>
+        </div>
+        <div class="cb" id="cd-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الموردون ===== -->
+  <div class="page" id="page-suppliers">
+    <div id="supp-list-view">
+      <div class="card">
+        <div class="ch" style="background:#fef5ec;border-bottom-color:#f5cba7;"><span>➕</span><h2 style="color:var(--orange)">إضافة مورد</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;"><label class="lbl">الاسم</label><input type="text" id="ns-name" placeholder="اسم المورد"></div>
+            <div style="min-width:125px;"><label class="lbl">الهاتف</label><input type="text" id="ns-phone" placeholder="01xxxxxxxxx"></div>
+            <div style="min-width:120px;"><label class="lbl">رصيد مبدئي</label><input type="number" id="ns-balance" placeholder="0" step="0.01"></div>
+            <button class="btn btn-o" onclick="addSupplier()">➕ إضافة</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch" style="background:#fef5ec;"><span>🔍</span><h2 style="color:var(--orange)">بحث</h2></div>
+        <div class="cb"><input type="text" id="searchSupplierInput" placeholder="ابحث بالاسم أو رقم الهاتف..." oninput="filterSuppliersList()" style="text-align:right"></div>
+      </div>
+      <div id="supp-list-cont"></div>
+    </div>
+    <div id="supp-detail-view" style="display:none;">
+      <button class="back-btn" onclick="showSuppList()">◀ رجوع</button>
+      <div class="card">
+        <div class="ch" style="background:#fef5ec;border-bottom-color:#f5cba7;">
+          <span>🚛</span><h2 id="sd-name" style="color:var(--orange)">-</h2>
+          <span class="cbadge" style="background:var(--orange)" id="sd-bal">0 جنيه</span>
+        </div>
+        <div class="cb" id="sd-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الفواتير ===== -->
+  <div class="page" id="page-invoices">
+    <div class="card">
+      <div class="ch g"><span>🧾</span><h2>فواتير الموردين</h2></div>
+      <div class="cb">
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="flex:1;"><label class="lbl">المورد</label><select id="inv-supp-sel"><option value="">-- اختر --</option></select></div>
+          <button class="btn btn-g" onclick="generateInvoice()">📄 إنشاء فاتورة</button>
+        </div>
+      </div>
+    </div>
+    <div id="invoices-cont"></div>
+  </div>
+
+  <!-- ===== صفحة الموظفون ===== -->
+  <div class="page" id="page-employees">
+    <div id="emp-list-view">
+      <div class="card">
+        <div class="ch g"><span>➕</span><h2>إضافة موظف</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:2;min-width:110px;"><label class="lbl">الاسم</label><input type="text" id="emp-name" placeholder="اسم الموظف"></div>
+            <div style="min-width:100px;"><label class="lbl">المهنة</label>
+              <select id="emp-role"><option value="عامل">عامل</option><option value="محاسب">محاسب</option><option value="بائع">بائع</option></select>
+            </div>
+            <div style="min-width:100px;"><label class="lbl">الراتب</label><input type="number" id="emp-salary" placeholder="0" min="0"></div>
+            <div style="min-width:110px;"><label class="lbl">الهاتف</label><input type="text" id="emp-phone" placeholder="01xxxxxxxxx"></div>
+            <button class="btn btn-g" onclick="addEmployee()">➕ إضافة</button>
+          </div>
+        </div>
+      </div>
+      <div id="emp-list-cont"><p style="text-align:center;color:#aaa;padding:24px">لا يوجد موظفون</p></div>
+    </div>
+    <div id="emp-detail-view" style="display:none;">
+      <button class="back-btn" onclick="showEmpList()">◀ رجوع</button>
+      <div class="card">
+        <div class="ch g">
+          <span>👷</span><h2 id="ed-name">-</h2>
+          <span class="cbadge g" id="ed-role">-</span>
+          <span style="font-size:0.82rem;color:var(--green);font-weight:700;margin-right:6px;" id="ed-salary"></span>
+        </div>
+        <div class="cb" id="ed-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الشركاء ===== -->
+  <div class="page" id="page-partners">
+    <div id="part-list-view">
+      <div class="card">
+        <div class="ch b"><span>➕</span><h2 style="color:var(--blue)">إضافة شريك</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:2;min-width:110px;"><label class="lbl">الاسم</label><input type="text" id="pt-name" placeholder="اسم الشريك"></div>
+            <div style="min-width:100px;"><label class="lbl">الهاتف</label><input type="text" id="pt-phone" placeholder="01xxxxxxxxx"></div>
+            <div style="min-width:100px;"><label class="lbl">مصاريف يومية</label><input type="number" id="pt-daily" placeholder="0" min="0"></div>
+            <div style="min-width:90px;"><label class="lbl">نسبة أرباح %</label><input type="number" id="pt-profit" placeholder="0" min="0" max="100"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px;">
+            <div style="flex:1;min-width:130px;"><label class="lbl">حساب بنكي</label><input type="text" id="pt-bank" placeholder="رقم الحساب"></div>
+            <div style="flex:1;min-width:130px;"><label class="lbl">حساب بريد</label><input type="text" id="pt-post" placeholder="رقم البريد"></div>
+            <div style="flex:1;min-width:130px;"><label class="lbl">فودافون كاش</label><input type="text" id="pt-voda" placeholder="رقم فودافون"></div>
+            <button class="btn btn-b" onclick="addPartner()">➕ إضافة</button>
+          </div>
+        </div>
+      </div>
+      <div id="part-list-cont"><p style="text-align:center;color:#aaa;padding:24px">لا يوجد شركاء</p></div>
+    </div>
+    <div id="part-detail-view" style="display:none;">
+      <button class="back-btn" onclick="showPartList()">◀ رجوع</button>
+      <div class="card">
+        <div class="ch b">
+          <span>🤝</span><h2 id="pd-name" style="color:var(--blue)">-</h2>
+          <span class="cbadge b" id="pd-info"></span>
+        </div>
+        <div class="cb" id="pd-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة المحلات ===== -->
+  <div class="page" id="page-shops">
+    <div id="shop-list-view">
+      <div class="card">
+        <div class="ch" style="background:#f3e5f5;border-bottom-color:#ce93d8;"><span>➕</span><h2 style="color:#8e24aa">إضافة محل</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:2;min-width:140px;"><label class="lbl">اسم صاحب المحل</label><input type="text" id="sh-name" placeholder="مثال: أحمد وعلي"></div>
+            <div style="min-width:120px;"><label class="lbl">رقم الهاتف</label><input type="text" id="sh-phone" placeholder="01xxxxxxxxx"></div>
+            <button class="btn" style="background:#8e24aa;color:#fff;" onclick="addShop()">➕ إضافة</button>
+          </div>
+        </div>
+      </div>
+      <div id="shop-list-cont"><p style="text-align:center;color:#aaa;padding:24px">لا توجد محلات</p></div>
+    </div>
+    <div id="shop-detail-view" style="display:none;">
+      <button class="back-btn" onclick="showShopList()">◀ رجوع</button>
+      <div class="card">
+        <div class="ch" style="background:#f3e5f5;border-bottom-color:#ce93d8;">
+          <span>🏬</span><h2 id="shd-name" style="color:#8e24aa">-</h2>
+          <span class="cbadge" style="background:#8e24aa" id="shd-bal">-</span>
+        </div>
+        <div class="cb" id="shd-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الخزنة ===== -->
+  <div class="page" id="page-khazna">
+    <div style="display:flex;gap:0;margin-bottom:14px;border-radius:11px;overflow:hidden;box-shadow:var(--shadow);">
+      <button class="btn-g" style="flex:1;padding:14px;text-align:center;font-family:Cairo,sans-serif;font-size:0.95rem;font-weight:800;border:none;cursor:pointer;"
+        onclick="showKTab('col',this)">💵 التحصيلات</button>
+      <button style="flex:1;padding:14px;text-align:center;font-family:Cairo,sans-serif;font-size:0.95rem;font-weight:800;border:none;cursor:pointer;background:#fdf2f2;color:var(--red);"
+        onclick="showKTab('exp',this)">💸 المصروفات</button>
+    </div>
+    <!-- التحصيلات -->
+    <div id="ks-col">
+      <div class="card">
+        <div class="ch g"><span>➕</span><h2>تسجيل تحصيل</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:120px;"><label class="lbl">العميل</label><select id="col-cust-sel"><option value="">-- اختر --</option></select></div>
+            <div style="min-width:100px;"><label class="lbl">المبلغ</label><input type="number" id="col-amount" placeholder="0" min="0"></div>
+            <div style="min-width:100px;"><label class="lbl">قطعية</label><input type="number" id="col-discount" placeholder="0" min="0"></div>
+            <div style="min-width:115px;"><label class="lbl">ملاحظة</label><input type="text" id="col-note" placeholder="دفعة..."></div>
+            <button class="btn btn-g" onclick="addCollection()">✅</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch g"><span>📋</span><h2>تحصيلات اليوم</h2><span class="cbadge g" id="col-badge">-</span></div>
+        <div class="cb" id="col-body"></div>
+        <div class="cb" style="border-top:2px solid var(--border);">
+          <div style="background:var(--green-light);border:1.5px solid #a9dfbf;border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;">
+            <span>إجمالي التحصيلات</span><strong id="col-total" style="color:var(--green)">0 جنيه</strong>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch" style="background:#fef9e7;border-bottom-color:#f0d080;"><span>📊</span><h2 style="color:#d4ac0d">ملخص الخزنة</h2></div>
+        <div class="cb">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;">
+            <div style="background:var(--green-light);border:1.5px solid #a9dfbf;border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;"><span>💵 التحصيلات</span><strong id="sum-col" style="color:var(--green)">0 جنيه</strong></div>
+            <div style="background:var(--red-light);border:1.5px solid #f5c6c6;border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;"><span>💸 المصروفات</span><strong id="sum-exp" style="color:var(--red)">0 جنيه</strong></div>
+            <div style="background:var(--blue-light);border:1.5px solid #aed6f1;border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;"><span>🛒 المبيعات</span><strong id="sum-sales" style="color:var(--blue)">0 جنيه</strong></div>
+          </div>
+          <div class="netbox"><span>💰 صافي الخزنة</span><span id="sum-net">0 جنيه</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- المصروفات -->
+    <div id="ks-exp" style="display:none;">
+      <div class="card">
+        <div class="ch r"><span>➕</span><h2 style="color:var(--red)">تسجيل مصروف</h2></div>
+        <div class="cb">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div style="flex:1;min-width:140px;"><label class="lbl">البيان</label><input type="text" id="exp-desc" placeholder="دفع للمورد..."></div>
+            <div style="min-width:130px;"><label class="lbl">المورد</label><select id="exp-supp-sel"><option value="">-- بدون مورد --</option></select></div>
+            <div style="min-width:100px;"><label class="lbl">المبلغ</label><input type="number" id="exp-amount" placeholder="0" min="0"></div>
+            <button class="btn btn-r" onclick="addExpense()">✅</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch r"><span>📋</span><h2 style="color:var(--red)">مصروفات اليوم</h2><span class="cbadge r" id="exp-badge">-</span></div>
+        <div class="cb" id="exp-body"></div>
+        <div class="cb" style="border-top:2px solid var(--border);">
+          <div style="background:var(--red-light);border:1.5px solid #f5c6c6;border-radius:9px;padding:10px 12px;display:flex;justify-content:space-between;">
+            <span>إجمالي المصروفات</span><strong id="exp-total" style="color:var(--red)">0 جنيه</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة الاشتراك ===== -->
+  <div class="page" id="page-subscription">
+    <div class="card">
+      <div class="ch g"><span>💳</span><h2>الاشتراك</h2></div>
+      <div class="cb">
+        <div id="sub-status" style="margin-bottom:16px;"></div>
+        <div class="plan-card featured" onclick="selectPlan('monthly')">
+          <div class="plan-price">٧٥٠ جنيه</div>
+          <div class="plan-period">شهرياً</div>
+          <ul class="plan-features">
+            <li>جميع الميزات بدون حدود</li><li>حفظ على السحابة</li>
+            <li>فتح من أي جهاز</li><li>دعم فني مستمر</li><li>تحديثات مجانية</li>
+          </ul>
+          <button class="btn btn-g">اختر الباقة</button>
+        </div>
+        <div class="plan-card" onclick="selectPlan('yearly')">
+          <div class="plan-price" style="color:var(--blue);">٦٠٠٠ جنيه</div>
+          <div class="plan-period">سنوياً (وفر ٣٠٠٠ جنيه)</div>
+          <ul class="plan-features">
+            <li>كل مميزات الباقة الشهرية</li><li>أولوية في الدعم الفني</li><li>تقارير متقدمة</li>
+          </ul>
+          <button class="btn btn-b">اختر الباقة</button>
+        </div>
+        <div id="payment-form" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:15px;">
+          <h3>اختر طريقة الدفع</h3>
+          <select id="payment-method" style="width:100%;margin-bottom:15px;" onchange="updatePaymentDetails()">
+            <option value="vodafone">📱 فودافون كاش</option>
+            <option value="instapay">🏦 إنستاباي</option>
+            <option value="bank">🏧 تحويل بنكي</option>
+            <option value="fawry">💳 فوري</option>
+          </select>
+          <div id="payment-details"></div>
+          <button class="btn btn-g" onclick="submitPayment()" style="width:100%;margin-top:15px;">✅ تأكيد الدفع</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== صفحة المشرف ===== -->
+  <div class="page" id="page-admin">
+    <div class="card">
+      <div class="ch r"><span>🛡️</span><h2>لوحة تحكم المشرف</h2></div>
+      <div class="cb"><div id="admin-payments-list">جاري التحميل...</div></div>
+    </div>
+  </div>
+</div><!-- /app -->
+
+<!-- ===== مودال البيع السريع ===== -->
+<div class="modal-overlay" id="quick-sale-modal"></div>
+
+<!-- ===== مودال إضافة منتج ===== -->
+<div class="modal-overlay" id="add-product-modal">
+  <div class="modal-box">
+    <button class="cx" onclick="closeModal('add-product-modal')">✕</button>
+    <h3>📦 إضافة منتج جديد</h3>
+    <div class="frow"><label>اسم المنتج</label><input type="text" id="pm-name" placeholder="مثال: فراولة"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="frow">
+        <label>الوحدة</label>
+        <select id="pm-unit">
+          <option value="عداية">عداية</option><option value="شوال">شوال</option>
+          <option value="سبت">سبت</option><option value="كرتونة">كرتونة</option>
+          <option value="كيلو">كيلو</option>
+        </select>
+      </div>
+      <div class="frow">
+        <label>الفئة</label>
+        <select id="pm-category">
+          <option value="خضار">خضار</option>
+          <option value="فاكهة">فاكهة</option>
+          <option value="أخرى">أخرى</option>
+        </select>
+      </div>
+      <div class="frow"><label>سعر الشراء الافتراضي</label><input type="number" id="pm-buyprice" placeholder="0" min="0"></div>
+      <div class="frow"><label>سعر البيع الافتراضي</label><input type="number" id="pm-sellprice" placeholder="0" min="0"></div>
+      <div class="frow"><label>حد تنبيه المخزون</label><input type="number" id="pm-lowalert" placeholder="5" min="0"></div>
+    </div>
+    <button class="btn btn-g" style="width:100%;margin-top:12px" onclick="saveNewProduct()">✅ حفظ المنتج</button>
+  </div>
+</div>
+
+<!-- ===== مودال تسجيل دفعة عميل ===== -->
+<div class="modal-overlay" id="add-payment-modal">
+  <div class="modal-box">
+    <button class="cx" onclick="closeModal('add-payment-modal')">✕</button>
+    <h3>💵 تسجيل دفعة — <span id="apm-cust-name"></span></h3>
+    <input type="hidden" id="apm-cust-id">
+    <div class="frow"><label>المبلغ</label><input type="number" id="apm-amount" placeholder="0" min="0"></div>
+    <div class="frow"><label>قطعية / خصم</label><input type="number" id="apm-discount" placeholder="0" min="0"></div>
+    <div class="frow"><label>ملاحظة</label><input type="text" id="apm-note" placeholder="دفعة نقدية..."></div>
+    <button class="btn btn-g" style="width:100%;margin-top:12px" onclick="submitPaymentModal()">✅ تأكيد</button>
+  </div>
+</div>
+
+<!-- ===== مودال المستخدم ===== -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal-box">
+    <button class="cx" onclick="closeModal('user-modal')">✕</button>
+    <h3>👤 حسابي</h3>
+    <div id="user-info" style="background:#f8f8f8;border-radius:9px;padding:12px;margin-bottom:14px;font-size:0.85rem;"></div>
+    <button class="btn btn-r" style="width:100%;" onclick="doLogout()">🚪 تسجيل الخروج</button>
+  </div>
+</div>
+
+<!-- ===== Libraries ===== -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- ===== Toast Container ===== -->
+<div id="toast-container"></div>
+
+<!-- ===== تحميل Supabase ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- ===== تحميل الوحدات بالترتيب الصحيح ===== -->
+<!-- 1. الأساس -->
+<!-- 2. طبقة API -->
+
+<!-- 3. وحدات العرض -->
+<!-- inventory يحل محل baqi و nazil القديمين -->
+<!-- sales الجديد: workflow السوق الحقيقي من incoming_batches -->
+<!-- tarhil الجديد: من daily_sales مباشرة بدون S.tarhilLog -->
+<!-- sales آخر renderers لأنه يعتمد على customers و suppliers -->
+
+<!-- ✅ Renderers الإضافية -->
+
+<!-- نقطة التشغيل الرئيسية أخيراً -->
+
+
+<!-- =========================================== -->
+<!-- ترتيب تحميل السكريبتات الصحيح              -->
+<!-- =========================================== -->
+
+<!-- 1. المكتبات الخارجية -->
+<!-- (موجودة في رأس الصفحة) -->
+
+<!-- 2. الأساسيات -->
+<script src="js/utils.js"></script>
+<script src="js/data.js"></script>
+<script src="js/api.js"></script>
+<!-- api_tarhil_addon.js لم يعد ضرورياً — api.js يحتوي على وظائفه -->
+
+<!-- 3. المصادقة -->
+<script src="js/auth.js"></script>
+
+<!-- 4. Renderers — بالترتيب -->
+<script src="js/renderers/dashboard.js"></script>
+<script src="js/renderers/inventory.js"></script>
+<script src="js/renderers/sales.js"></script>
+<script src="js/renderers/tarhil.js"></script>
+<script src="js/renderers/customers.js"></script>
+<script src="js/renderers/suppliers.js"></script>
+<script src="js/renderers/invoices.js"></script>
+<script src="js/renderers/employees.js"></script>
+<script src="js/renderers/partners.js"></script>
+<script src="js/renderers/shops.js"></script>
+<script src="js/renderers/khazna.js"></script>
+<script src="js/renderers/subscription.js"></script>
+<script src="js/renderers/admin.js"></script>
+
+<!-- 5. نقطة الدخول الرئيسية (آخراً) -->
+<script src="js/app.js"></script>
+
+</body>
+  </html>
