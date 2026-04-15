@@ -1,6 +1,9 @@
+[file name]: app.js.html
+[file content begin]
 // ============================================================
 // js/app.js — النقطة الرئيسية + نظام Rendering الذكي
 // محدَّث: inventory يحل محل baqi/nazil, sales و tarhil الجديدان
+// مع تحسين renderAll
 // ============================================================
 
 // ─────────────────────────────────────────────────────────────
@@ -29,13 +32,10 @@ window.addEventListener('sync-status', (e) => {
 const PAGE_RENDERS = {
   dashboard:    () => safeRender('dashboard',    renderDashboard),
 
-  // inventory يعرض النازل + الباقي معاً
   inventory:    () => safeRender('inventory',    renderInventory),
 
-  // sales: workflow السوق الحقيقي من incoming_batches
   sales:        () => { refreshDropdowns(); safeRender('sales', renderSalesTable); },
 
-  // tarhil: من daily_sales مباشرة
   tarhil:       () => safeRender('tarhil',       renderTarhil),
 
   customers:    () => safeRender('customers',    renderCustList),
@@ -53,7 +53,6 @@ const PAGE_RENDERS = {
   subscription: () => safeRender('subscription', renderSubscriptionStatus),
   admin:        () => safeRender('admin',        loadAdminPayments),
 
-  // للتوافق مع الروابط القديمة — تُعيد توجيه لـ inventory
   baqi:         () => safeRender('baqi',         renderInventory),
   nazil:        () => safeRender('nazil',        renderInventory),
 };
@@ -80,11 +79,19 @@ function renderPage(page) {
   }
 }
 
-// renderAll — للحالات التي تؤثر على أكثر من صفحة
+// renderAll — للحالات التي تؤثر على أكثر من صفحة (مثل إضافة دفعة)
 function renderAll() {
-  const current = _activePage;
-  const fn = PAGE_RENDERS[current];
-  if (fn) try { fn(); } catch(e) {}
+  const pagesToRefresh = ['inventory', 'sales', 'dashboard'];
+  pagesToRefresh.forEach(page => {
+    const fn = PAGE_RENDERS[page];
+    if (fn) try { fn(); } catch(e) { AppError.log(`renderAll:${page}`, e); }
+  });
+  // تحديث الخزنة أيضاً إذا كانت مفتوحة
+  if (_activePage === 'khazna') {
+    safeRender('khazna-col', renderCollections);
+    safeRender('khazna-exp', renderExpenses);
+    safeRender('khazna-sum', renderDaySummary);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -151,7 +158,6 @@ function showPage(n, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
 
-  // التوافق: baqi و nazil يعرضان inventory
   const actualPage = (n === 'baqi' || n === 'nazil') ? 'inventory' : n;
 
   const page = document.getElementById('page-' + actualPage);
@@ -160,7 +166,6 @@ function showPage(n, btn) {
   _activePage = actualPage;
   renderPage(actualPage);
 
-  // تحديث التاريخ في badge الصفحة
   updateDates();
 }
 
@@ -200,7 +205,6 @@ async function showApp() {
 
   await loadAppData();
 
-  // ضبط تاريخ الـ tarhil picker على اليوم
   const picker = document.getElementById('tarhil-date-picker');
   if (picker) picker.value = store._state.currentDate;
 
@@ -266,7 +270,6 @@ function updateDates() {
     const el = document.getElementById(id);
     if (el) el.textContent = displayDate;
   });
-  // تحديث picker الترحيل
   const picker = document.getElementById('tarhil-date-picker');
   if (picker && !picker.value) picker.value = d;
 }
@@ -315,7 +318,6 @@ async function init() {
   }
 }
 
-// حماية من التجمد
 window.addEventListener('load', () => {
   setTimeout(() => {
     const loading = document.getElementById('loading');
@@ -326,8 +328,8 @@ window.addEventListener('load', () => {
   }, 6000);
 });
 
-// Helpers للتوافق مع الكود القديم
 function N(n)      { return (parseFloat(n)||0).toLocaleString('ar-EG'); }
 function fmtDate(d){ return d.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
 
 init();
+[file content end]
