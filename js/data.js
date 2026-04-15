@@ -61,18 +61,25 @@ const Toast = {
 };
 
 const syncUI = { setStatus(status, msg) { window.dispatchEvent(new CustomEvent('sync-status', { detail: { status, msg } })); } };
-
 async function loadAppData() {
   if (!currentUser) return;
   store.setLoading(true);
   syncUI.setStatus('saving', 'جاري تحميل البيانات...');
   try {
-    // جلب company_id مباشرة إذا لم يكن موجوداً
+    // محاولة جلب company_id مع إعادة المحاولة
     if (!currentUser.company_id) {
-      const { data: prof } = await sb.from('profiles').select('company_id').eq('id', currentUser.id).single();
-      if (prof) currentUser.company_id = prof.company_id;
-      else throw new Error('لا يوجد بروفايل للمستخدم');
+      let retries = 0;
+      let prof = null;
+      while (retries < 3 && !prof) {
+        const { data } = await sb.from('profiles').select('company_id').eq('id', currentUser.id).maybeSingle();
+        if (data) prof = data;
+        else await new Promise(r => setTimeout(r, 500));
+        retries++;
+      }
+      if (prof?.company_id) currentUser.company_id = prof.company_id;
+      else throw new Error('لا يمكن تحديد الشركة — تأكد من تنفيذ FIX_RLS.sql');
     }
+    
     const [customers, suppliers, products, employees, partners, shops, invoices] = await Promise.all([
       API.customers.list(), API.suppliers.list(), API.products.list(),
       API.employees.list(), API.partners.list(), API.shops.list(), API.invoices.list()
@@ -87,10 +94,14 @@ async function loadAppData() {
     await loadTodayData();
     store._state.lastSync = new Date().toISOString();
     syncUI.setStatus('', 'محفوظ على السحابة ✓');
-  } catch(e) { AppError.log('loadAppData', e); syncUI.setStatus('error', 'خطأ في تحميل البيانات'); }
-  finally { store.setLoading(false); }
+  } catch(e) { 
+    AppError.log('loadAppData', e); 
+    syncUI.setStatus('error', 'خطأ في تحميل البيانات');
+    Toast.error('فشل تحميل البيانات: ' + e.message);
+  } finally { 
+    store.setLoading(false); 
+  }
 }
-
 async function loadTodayData() {
   const today = store._state.currentDate;
   const [inventory, sales, payments] = await Promise.all([
