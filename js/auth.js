@@ -1,5 +1,6 @@
 // ============================================================
-// auth.js — نسخة نهائية (تم تصحيح sb)
+// auth.js — نسخة مُصلحة
+// إصلاح: _setupUserData تتعامل مع RLS بشكل صحيح
 // ============================================================
 
 function switchAuthTab(tab) {
@@ -32,7 +33,6 @@ async function doLogin() {
   btn.disabled = true; btn.textContent = 'جاري الدخول...';
 
   try {
-    // ✅ التصحيح: استخدم sb بدلاً من ksb
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
 
     if (error) {
@@ -49,6 +49,13 @@ async function doLogin() {
 
     currentUser = data.user;
     await loadUserProfile();
+
+    // ✅ تأكد من وجود company_id قبل المتابعة
+    if (!currentUser.company_id) {
+      console.warn('company_id غير موجود — محاولة إنشاء شركة...');
+      await _setupUserData(currentUser, null);
+    }
+
     await showApp();
 
   } catch (e) {
@@ -76,10 +83,9 @@ async function doRegister() {
   btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
 
   try {
-    // ✅ استخدم sb بدلاً من ksb
     const { data, error } = await sb.auth.signUp({ email, password: pass });
 
-    const errMsg = error?.message || '';
+    const errMsg    = error?.message || '';
     const isDbError = errMsg.includes('Database error') || errMsg.includes('database');
     const isExisting = errMsg.includes('already') || errMsg.includes('registered') ||
                        errMsg.includes('User already');
@@ -103,7 +109,7 @@ async function doRegister() {
         await showApp();
         return;
       }
-      showAuthErr('خطأ في قاعدة البيانات. تأكد من تنفيذ QUICK_START.sql في Supabase ثم حاول مجدداً');
+      showAuthErr('خطأ في قاعدة البيانات. تأكد من تنفيذ FIX_RLS.sql في Supabase ثم حاول مجدداً');
       return;
     }
 
@@ -129,64 +135,97 @@ async function doRegister() {
   }
 }
 
-// ─── إعداد بيانات المستخدم (شركة + profile) ──────────────────
+// ─── إعداد بيانات المستخدم — النسخة المُصلحة ─────────────────
 async function _setupUserData(user, shopName) {
   const displayName = shopName || user.user_metadata?.shop_name ||
                       user.email?.split('@')[0] || 'محل';
   try {
-    const { data: co } = await sb.from('companies')
-      .select('id, name, subscription, trial_ends')
+    // ─── 1. ابحث عن شركة موجودة ───────────────────────────
+    const { data: co, error: coErr } = await sb.from('companies')
+      .select('id, name, subscription, trial_ends, sub_ends')
       .eq('owner_id', user.id)
       .maybeSingle();
+
+    if (coErr) {
+      console.error('companies select error:', coErr.message);
+    }
 
     let companyId;
 
     if (co) {
+      // ─── شركة موجودة ───────────────────────────────────
       companyId = co.id;
       currentUser.company_id   = companyId;
       currentUser.company_name = co.name;
       currentUser.subscription = co.subscription || 'trial';
       currentUser.trial_ends   = co.trial_ends;
+      currentUser.sub_ends     = co.sub_ends;
+
     } else {
+      // ─── إنشاء شركة جديدة ──────────────────────────────
+      console.log('إنشاء شركة جديدة...');
       const { data: newCo, error: ce } = await sb.from('companies').insert({
         name:         displayName,
         owner_id:     user.id,
         subscription: 'trial',
-        trial_ends:   new Date(Date.now() + 14*864e5).toISOString()
+        trial_ends:   new Date(Date.now() + 14 * 864e5).toISOString()
       }).select().single();
 
       if (ce) {
-        console.error('companies insert error:', ce.message);
-        currentUser.company_id   = user.id;
+        // ✅ الإصلاح: لو فشل INSERT، ابحث مجدداً — قد تكون موجودة بالفعل
+        console.error('companies insert error:', ce.message, ce.code);
+
+        // حاول جلب الشركة مرة ثانية (قد يكون race condition)
+        const { data: retry } = await sb.from('companies')
+          .select('id, name, subscription, trial_ends')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+
+        if (retry) {
+          companyId = retry.id;
+          currentUser.company_id   = companyId;
+          currentUser.company_name = retry.name;
+          currentUser.subscription = retry.subscription || 'trial';
+          currentUser.trial_ends   = retry.trial_ends;
+        } else {
+          // ✅ لا تضع company_id = user.id أبداً — هذا كان سبب المشكلة
+          console.error('❌ فشل إنشاء الشركة ولم توجد — تحقق من RLS policies');
+          showAuthErr('خطأ في إعداد الحساب. تأكد من تنفيذ FIX_RLS.sql في Supabase');
+          return false;
+        }
+      } else {
+        companyId = newCo.id;
+        currentUser.company_id   = companyId;
         currentUser.company_name = displayName;
         currentUser.subscription = 'trial';
-        currentUser.role         = 'owner';
-        currentUser.full_name    = displayName;
-        return;
+        currentUser.trial_ends   = newCo.trial_ends;
       }
-      companyId = newCo.id;
-      currentUser.company_id   = companyId;
-      currentUser.company_name = displayName;
-      currentUser.subscription = 'trial';
-      currentUser.trial_ends   = newCo.trial_ends;
     }
 
-    await sb.from('profiles').upsert({
-      id: user.id, company_id: companyId,
-      full_name: displayName, role: 'owner', is_active: true
+    // ─── 2. حفظ/تحديث profile ────────────────────────────
+    const { error: profErr } = await sb.from('profiles').upsert({
+      id:         user.id,
+      company_id: companyId,
+      full_name:  displayName,
+      role:       'owner',
+      is_active:  true
     }, { onConflict: 'id' });
+
+    if (profErr) {
+      console.error('profiles upsert error:', profErr.message);
+    }
 
     currentUser.role      = 'owner';
     currentUser.full_name = displayName;
-    console.log('✅ Setup done:', displayName, companyId);
+
+    console.log('✅ _setupUserData done:', { displayName, companyId });
+    return true;
 
   } catch (e) {
-    console.error('_setupUserData:', e);
-    currentUser.company_id   = user.id;
-    currentUser.company_name = displayName;
-    currentUser.role         = 'owner';
-    currentUser.subscription = 'trial';
-    currentUser.full_name    = displayName;
+    console.error('_setupUserData exception:', e);
+    // ✅ لا نضع company_id = user.id أبداً
+    showAuthErr('خطأ في إعداد الحساب: ' + (e?.message || e));
+    return false;
   }
 }
 
@@ -213,10 +252,13 @@ function checkTrial() {
   banner.style.background = days > 0
     ? 'linear-gradient(135deg,#f39c12,#e67e22)'
     : 'linear-gradient(135deg,#c0392b,#e74c3c)';
-  text.textContent = days > 0 ? `تجربة مجانية — متبقي ${days} يوم` : 'انتهت التجربة — اشترك الآن';
+  text.textContent = days > 0
+    ? `تجربة مجانية — متبقي ${days} يوم`
+    : 'انتهت التجربة — اشترك الآن';
 }
 
 function updateAdminTabVisibility() {
   const t = document.getElementById('adminTabBtn');
-  if (t) t.style.display = (currentUser?.role === 'owner' || currentUser?.role === 'admin') ? '' : 'none';
+  if (t) t.style.display =
+    (currentUser?.role === 'owner' || currentUser?.role === 'admin') ? '' : 'none';
 }
