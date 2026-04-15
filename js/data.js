@@ -1,3 +1,5 @@
+[file name]: data.js.html
+[file content begin]
 // ============================================================
 // js/data.js — نسخة معدلة جذرياً (تجاوز مشكلة company_id)
 // ============================================================
@@ -61,6 +63,7 @@ const Toast = {
 };
 
 const syncUI = { setStatus(status, msg) { window.dispatchEvent(new CustomEvent('sync-status', { detail: { status, msg } })); } };
+
 async function loadAppData() {
   if (!currentUser) return;
   store.setLoading(true);
@@ -102,6 +105,7 @@ async function loadAppData() {
     store.setLoading(false); 
   }
 }
+
 async function loadTodayData() {
   const today = store._state.currentDate;
   const [inventory, sales, payments] = await Promise.all([
@@ -114,46 +118,33 @@ async function loadTodayData() {
 
 async function loadUserProfile() {
   try {
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) return;
-
-    currentUser = user; // تحديث بيانات المستخدم الحالي
-
-    const { data: profile } = await sb
-      .from('profiles')
-      .select('*, company:companies(*)')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (profile && profile.company_id) {
+    const profile = await API.company.getProfile();
+    if (profile) {
       currentUser.company_id = profile.company_id;
       currentUser.role = profile.role;
+      currentUser.full_name = profile.full_name;
+      currentUser.company_name = profile.company?.name;
+      currentUser.subscription = profile.company?.subscription;
+      currentUser.trial_ends = profile.company?.trial_ends;
+      currentUser.sub_ends = profile.company?.sub_ends;
     } else {
-      // المعرف الافتراضي الذي أنشأناه في SQL
-      currentUser.company_id = '00000000-0000-0000-0000-000000000000';
+      // محاولة بديلة: جلب company_id مباشرة
+      const { data: prof } = await sb.from('profiles').select('company_id').eq('id', currentUser.id).single();
+      if (prof) currentUser.company_id = prof.company_id;
     }
-
-    // 🔥 الأهم: جلب البيانات فوراً من السحاب بعد تحديد الشركة
-    console.log("جاري مزامنة البيانات من السحاب...");
-    const [custs, supps, inv, prods, sales] = await Promise.all([
-      API.customers.list(),
-      API.suppliers.list(),
-      API.inventory.list(),
-      API.products.list(),
-      API.sales.list(store._state.currentDate)
-    ]);
-
-    // تخزينها في الـ Store لتعرض في الشاشات
-    store.set('customers', custs || []);
-    store.set('suppliers', supps || []);
-    store.set('inventory', inv || []);
-    store.set('products',  prods || []);
-    store.set('sales',     sales || []);
-
-    console.log("✅ تمت المزامنة بنجاح!");
-  } catch(e) { 
-    console.error('فشل المزامنة:', e);
-  }
+  } catch(e) { AppError.log('loadUserProfile', e); }
 }
 
+const RBAC = {
+  can(action) {
+    const role = currentUser?.role;
+    if (!role) return false;
+    const permissions = { owner: ['*'], admin: ['read','write','delete','manage_employees','manage_partners'], accountant: ['read','write','invoices','payments','reports'], worker: ['read','sales','inventory_add'] };
+    const perms = permissions[role] || [];
+    return perms.includes('*') || perms.includes(action);
+  },
+  requireRole(roles, action) { if (!this.can(action)) { Toast.error('ليس لديك صلاحية'); return false; } return true; }
+};
+
 function refreshLocal(key, newData) { store.set(key, newData); if (typeof Cache !== 'undefined') Cache.invalidate(key); }
+[file content end]
