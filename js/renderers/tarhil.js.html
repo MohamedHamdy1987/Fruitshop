@@ -1,3 +1,5 @@
+[file name]: tarhil.js.html
+[file content begin]
 // ============================================================
 // js/renderers/tarhil.js
 // الترحيلات — من daily_sales مباشرة (is_cash = false)
@@ -92,14 +94,15 @@ async function renderTarhil() {
   }
 }
 
-async function loadTarhilByDate() {
-  const picker = document.getElementById('tarhil-date-picker');
-  if (picker) {
-    renderTarhil();
-  }
+// ✅ الدالة المفقودة التي تسمى من index.html
 function goToTarhilDate(date) {
   const picker = document.getElementById('tarhil-date-picker');
   if (picker) picker.value = date;
   renderTarhil();
 }
+
+// للتوافق مع زر "اليوم"
+function loadTarhilByDate() {
+  renderTarhil();
 }
+[file content end]
