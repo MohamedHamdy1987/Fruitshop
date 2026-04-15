@@ -1,7 +1,10 @@
+[file name]: khazna.js.html
+[file content begin]
 // ============================================================
 // renderers/khazna.js — محدَّث
 // ✅ زر تعديل ومسح على كل حركة تحصيل ومصروف
 // ✅ البيعات النقدية تظهر تلقائياً في التحصيلات
+// ✅ تحديث العملاء بعد تعديل الدفعة
 // ============================================================
 
 // ─── تسجيل تحصيل ────────────────────────────────────────────
@@ -114,7 +117,7 @@ async function savePaymentEdit(id) {
     await API.payments.update(id, { amount, description: desc });
     const [pays, custs] = await Promise.all([
       API.payments.list(store._state.currentDate),
-      API.customers.list()
+      API.customers.list()  // تحديث العملاء لأن الرصيد قد تغير
     ]);
     store.set('payments', pays);
     store.set('customers', custs);
@@ -241,3 +244,4 @@ function renderDaySummary() {
 // ─── للتوافق مع الكود القديم ─────────────────────────────────
 function delCollection(id) { delPayment(id); }
 function delExpense(id)    { delPayment(id); }
+[file content end]
