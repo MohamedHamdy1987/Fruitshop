@@ -97,4 +97,9 @@ async function loadTarhilByDate() {
   if (picker) {
     renderTarhil();
   }
+function goToTarhilDate(date) {
+  const picker = document.getElementById('tarhil-date-picker');
+  if (picker) picker.value = date;
+  renderTarhil();
+}
 }
