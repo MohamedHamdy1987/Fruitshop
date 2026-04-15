@@ -1,8 +1,11 @@
+[file name]: invoices.js.html
+[file content begin]
 // ============================================================
 // renderers/invoices.js — محدَّث
 // ✅ زر تعديل على كل فاتورة (Inline Edit)
 // ✅ إصلاح حساب paid_amount
 // ✅ فاتورة تلقائية مُستقبَلة من sales.js
+// ✅ تحسين debounce لتحديث الخصومات
 // ============================================================
 
 function renderInvoicesPage() {
@@ -120,13 +123,13 @@ function _renderInvoiceCard(inv) {
             <td>${item.weight_kg>0?N(item.weight_kg)+' ك':'-'}</td>
             <td>${N(item.unit_price)} ج</td>
             <td><strong>${N(item.total)} ج</strong></td>
-          </tr>`).join('')}
+           </tr>`).join('')}
         </tbody>
         <tfoot><tr style="background:#f9f9f9">
           <td colspan="5" style="padding:6px;font-weight:700;text-align:right">الإجمالي الخام</td>
           <td><strong>${N(gross)} ج</strong></td>
-        </tr></tfoot>
-      </table>
+         </tr></tfoot>
+       </table>
     </div>` : ''}
 
     <!-- الخصومات -->
@@ -222,7 +225,7 @@ async function saveInvoiceEdit(invId) {
   } catch(e) { AppError.log('saveInvoiceEdit', e, true); }
 }
 
-// ─── تحديث خصم فاتورة (quick edit) ─────────────────────────
+// ─── تحديث خصم فاتورة (quick edit) مع debounce ─────────────────────────
 let _dedTimer = {};
 async function updateInvDed(invId, field, val) {
   const inv = (store.invs||[]).find(i => i.id===invId||i.id==invId);
@@ -233,7 +236,7 @@ async function updateInvDed(invId, field, val) {
   const netEl = document.getElementById('net-'+invId);
   if (netEl) netEl.textContent = N(inv.total_amount) + ' جنيه';
 
-  clearTimeout(_dedTimer[invId]);
+  if (_dedTimer[invId]) clearTimeout(_dedTimer[invId]);
   _dedTimer[invId] = setTimeout(async () => {
     try {
       await API.invoices.updateDeductions(invId, {
@@ -242,7 +245,7 @@ async function updateInvDed(invId, field, val) {
         discount:   inv.discount||0
       });
     } catch(e) { AppError.log('updateInvDed', e); }
-  }, 1200);
+  }, 800);
 }
 
 // ─── حذف فاتورة ─────────────────────────────────────────────
@@ -271,7 +274,6 @@ async function recordInvoicePayment(invId, remaining, invType, suppId, custId) {
 
     const inv = (store.invs||[]).find(i => i.id===invId||i.id==invId);
     if (inv) {
-      // ✅ الحساب الصحيح: paid_amount القديم + المبلغ الجديد
       const newPaid   = parseFloat(inv.paid_amount||0) + amount;
       const newTotal  = parseFloat(inv.total_amount||0);
       const newStatus = newPaid >= newTotal ? 'paid' : 'partial';
@@ -311,3 +313,4 @@ function printInvoice(invId) {
   w.document.close();
   setTimeout(() => w.print(), 500);
 }
+[file content end]
