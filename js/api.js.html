@@ -1,18 +1,13 @@
 // ============================================================
-// js/api.js — طبقة الـ API الكاملة (نسخة محدّثة)
+// js/api.js — النسخة النهائية المُصلحة
+// ✅ بدون joins على جداول غير موجودة
+// ✅ كل join آمن ومضمون
 // ============================================================
 
 function withCompany(data) {
   const companyId = currentUser?.company_id;
-  if (!companyId) throw new Error('لا يوجد شركة — تأكد من تنفيذ schema.sql في Supabase Dashboard');
+  if (!companyId) throw new Error('لا يوجد company_id — سجّل خروج ودخول مجدداً');
   return { ...data, company_id: companyId };
-}
-
-function _requireCompany() {
-  if (!currentUser?.company_id) {
-    Toast.error('لا يوجد شركة مرتبطة — يرجى تسجيل الخروج والدخول مجدداً');
-    throw new Error('no company_id');
-  }
 }
 
 const API = {
@@ -26,75 +21,48 @@ const API = {
         .eq('company_id', currentUser.company_id)
         .order('batch_date', { ascending: false });
       if (error) throw error;
-      return data;
+      return data || [];
     },
-
     async add(batch) {
-      const payload = withCompany({
-        product_id:    batch.productId,
-        supplier_id:   batch.supplierId,
-        batch_date:    batch.date || new Date().toISOString().slice(0,10),
-        quantity:      batch.quantity,
-        remaining_qty: batch.quantity,
-        buy_price:     batch.buyPrice || 0,
-        noulon:        batch.noulon || 0,
-        mashal:        batch.mashal || 0,
-        notes:         batch.notes || null,
-        status:        'active'
-      });
-      const { data, error } = await sb.from('incoming_batches').insert(payload).select().single();
+      const { data, error } = await sb.from('incoming_batches')
+        .insert(withCompany({
+          product_id:    batch.productId,
+          supplier_id:   batch.supplierId,
+          batch_date:    batch.date || new Date().toISOString().slice(0,10),
+          quantity:      batch.quantity,
+          remaining_qty: batch.quantity,
+          buy_price:     batch.buyPrice || 0,
+          noulon:        batch.noulon   || 0,
+          mashal:        batch.mashal   || 0,
+          notes:         batch.notes    || null,
+          status:        'active'
+        })).select().single();
       if (error) throw error;
       return data;
     },
-
-    // ✅ تعديل دفعة
     async update(batchId, updates) {
       const { data, error } = await sb.from('incoming_batches')
-        .update(updates)
-        .eq('id', batchId)
+        .update(updates).eq('id', batchId)
         .eq('company_id', currentUser.company_id)
         .select().single();
       if (error) throw error;
       return data;
     },
-
-    // ✅ حذف دفعة عبر API (بدلاً من استدعاء sb مباشرة)
     async delete(batchId) {
       const { error } = await sb.from('incoming_batches')
-        .delete()
-        .eq('id', batchId)
+        .delete().eq('id', batchId)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
-
     async carryOver(batchId, remainingQty, newDate) {
-      await sb.from('incoming_batches')
-        .update({ status: 'carried_over' })
-        .eq('id', batchId);
-      const { data: old } = await sb.from('incoming_batches')
-        .select('*').eq('id', batchId).single();
+      await sb.from('incoming_batches').update({ status: 'carried_over' }).eq('id', batchId);
+      const { data: old } = await sb.from('incoming_batches').select('*').eq('id', batchId).single();
       const { data, error } = await sb.from('incoming_batches').insert(withCompany({
-        product_id:    old.product_id,
-        supplier_id:   old.supplier_id,
-        batch_date:    newDate,
-        quantity:      remainingQty,
-        remaining_qty: remainingQty,
-        buy_price:     old.buy_price,
-        noulon:        old.noulon,
-        mashal:        old.mashal,
-        carryover_from: batchId,
-        status:        'active'
+        product_id: old.product_id, supplier_id: old.supplier_id,
+        batch_date: newDate, quantity: remainingQty, remaining_qty: remainingQty,
+        buy_price: old.buy_price, noulon: old.noulon, mashal: old.mashal,
+        carryover_from: batchId, status: 'active'
       })).select().single();
-      if (error) throw error;
-      return data;
-    },
-
-    async getLowStock() {
-      const { data, error } = await sb
-        .from('inventory_summary')
-        .select('*')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_low_stock', true);
       if (error) throw error;
       return data;
     }
@@ -104,68 +72,54 @@ const API = {
   sales: {
     async list(date) {
       let q = sb.from('daily_sales')
-        .select(`*, product:products(name,unit), customer:customers(name), batch:incoming_batches(remaining_qty)`)
+        .select('*, product:products(name,unit), customer:customers(name,phone)')
         .eq('company_id', currentUser.company_id)
         .order('created_at', { ascending: false });
       if (date) q = q.eq('sale_date', date);
       const { data, error } = await q;
       if (error) throw error;
-      return data;
+      return data || [];
     },
-
     async add(sale) {
-      const payload = withCompany({
-        sale_date:    sale.date || new Date().toISOString().slice(0,10),
+      const { data, error } = await sb.from('daily_sales').insert(withCompany({
+        sale_date:    sale.date       || new Date().toISOString().slice(0,10),
         customer_id:  sale.customerId || null,
         product_id:   sale.productId,
         batch_id:     sale.batchId,
-        invoice_id:   sale.invoiceId || null,
-        quantity:     sale.quantity || 0,
-        weight_kg:    sale.weightKg || 0,
+        invoice_id:   sale.invoiceId  || null,
+        quantity:     sale.quantity   || 0,
+        weight_kg:    sale.weightKg   || 0,
         unit_price:   sale.unitPrice,
         total_amount: sale.total,
-        is_cash:      sale.isCash || false,
-        notes:        sale.notes || null,
+        is_cash:      sale.isCash     || false,
+        notes:        sale.notes      || null,
         created_by:   currentUser.id
-      });
-      const { data, error } = await sb.from('daily_sales').insert(payload).select().single();
+      })).select().single();
       if (error) throw error;
       return data;
     },
-
-    // ✅ تعديل بيعة
     async update(saleId, updates) {
       const { data, error } = await sb.from('daily_sales')
-        .update(updates)
-        .eq('id', saleId)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+        .update(updates).eq('id', saleId)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
-
     async delete(saleId) {
-      const { error } = await sb.from('daily_sales').delete().eq('id', saleId);
+      const { error } = await sb.from('daily_sales').delete().eq('id', saleId)
+        .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
-
     async getDailySummary(date) {
-      const { data, error } = await sb
-        .from('daily_summary')
-        .select('*')
-        .eq('company_id', currentUser.company_id)
-        .eq('sale_date', date)
-        .maybeSingle();
+      const { data, error } = await sb.from('daily_summary').select('*')
+        .eq('company_id', currentUser.company_id).eq('sale_date', date).maybeSingle();
       if (error) throw error;
       return data;
     },
-
     async listByBatch(batchId) {
-      const { data, error } = await sb
-        .from('daily_sales')
-        .select(`id, quantity, weight_kg, unit_price, total_amount, is_cash, sale_date, customer_id, customer:customers(name)`)
-        .eq('company_id', currentUser.company_id)
-        .eq('batch_id', batchId)
+      const { data, error } = await sb.from('daily_sales')
+        .select('id, quantity, weight_kg, unit_price, total_amount, is_cash, sale_date, customer_id, customer:customers(name)')
+        .eq('company_id', currentUser.company_id).eq('batch_id', batchId)
         .order('created_at', { ascending: true });
       if (error) throw error;
       return data || [];
@@ -175,123 +129,75 @@ const API = {
   // ─── العملاء ───────────────────────────────────────────────
   customers: {
     async list() {
-      const { data, error } = await sb
-        .from('customers')
-        .select('*')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_active', true)
-        .order('name');
+      const { data, error } = await sb.from('customers').select('*')
+        .eq('company_id', currentUser.company_id).eq('is_active', true).order('name');
       if (error) throw error;
-      return data;
+      return data || [];
     },
-
-    async getWithBalance() {
-      const { data, error } = await sb
-        .from('customer_balances')
-        .select('*')
-        .eq('company_id', currentUser.company_id)
-        .order('current_balance', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-
     async add(cust) {
       const { data, error } = await sb.from('customers').insert(withCompany({
-        name:         cust.name,
-        phone:        cust.phone || null,
-        address:      cust.address || null,
-        balance:      cust.initialBalance || 0,
-        credit_limit: cust.creditLimit || 0,
-        notes:        cust.notes || null
+        name: cust.name, phone: cust.phone || null, address: cust.address || null,
+        balance: cust.initialBalance || 0, credit_limit: cust.creditLimit || 0, notes: cust.notes || null
       })).select().single();
       if (error) throw error;
       return data;
     },
-
     async update(id, updates) {
-      const { data, error } = await sb.from('customers')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('customers').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
-
     async delete(id) {
-      const { error } = await sb.from('customers')
-        .update({ is_active: false }).eq('id', id)
+      const { error } = await sb.from('customers').update({ is_active: false }).eq('id', id)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
-
     async getLedger(customerId) {
-      const { data, error } = await sb
-        .from('daily_sales')
-        .select('sale_date,total_amount,is_cash,product:products(name),notes')
-        .eq('company_id', currentUser.company_id)
-        .eq('customer_id', customerId)
+      const { data: sales, error: se } = await sb.from('daily_sales')
+        .select('sale_date, total_amount, is_cash, product:products(name), notes')
+        .eq('company_id', currentUser.company_id).eq('customer_id', customerId)
         .order('sale_date', { ascending: false });
-      if (error) throw error;
-
-      const { data: pData, error: pError } = await sb
-        .from('payments')
-        .select('payment_date,amount,discount_amount,description,payment_type')
-        .eq('company_id', currentUser.company_id)
-        .eq('customer_id', customerId)
+      if (se) throw se;
+      const { data: pays, error: pe } = await sb.from('payments')
+        .select('payment_date, amount, discount_amount, description, payment_type')
+        .eq('company_id', currentUser.company_id).eq('customer_id', customerId)
         .order('payment_date', { ascending: false });
-      if (pError) throw pError;
-
-      return { sales: data, payments: pData };
+      if (pe) throw pe;
+      return { sales: sales || [], payments: pays || [] };
     }
   },
 
   // ─── الموردون ──────────────────────────────────────────────
   suppliers: {
     async list() {
-      const { data, error } = await sb
-        .from('suppliers')
-        .select('*')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_active', true)
-        .order('name');
+      const { data, error } = await sb.from('suppliers').select('*')
+        .eq('company_id', currentUser.company_id).eq('is_active', true).order('name');
       if (error) throw error;
-      return data;
+      return data || [];
     },
-
     async add(sup) {
       const { data, error } = await sb.from('suppliers').insert(withCompany({
-        name:            sup.name,
-        phone:           sup.phone || null,
-        // ✅ رصيد مبدئي للمورد
-        balance:         sup.initialBalance || 0,
-        notes:           sup.notes || null
+        name: sup.name, phone: sup.phone || null, balance: sup.initialBalance || 0, notes: sup.notes || null
       })).select().single();
       if (error) throw error;
       return data;
     },
-
     async update(id, updates) {
-      const { data, error } = await sb.from('suppliers')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('suppliers').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
-
     async delete(id) {
-      const { error } = await sb.from('suppliers')
-        .update({ is_active: false }).eq('id', id)
+      const { error } = await sb.from('suppliers').update({ is_active: false }).eq('id', id)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
-
     async getLedger(supplierId) {
-      const { data, error } = await sb
-        .from('payments')
-        .select('payment_date,amount,description,payment_type')
-        .eq('company_id', currentUser.company_id)
-        .eq('supplier_id', supplierId)
+      const { data, error } = await sb.from('payments')
+        .select('payment_date, amount, description, payment_type')
+        .eq('company_id', currentUser.company_id).eq('supplier_id', supplierId)
         .order('payment_date', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -301,41 +207,28 @@ const API = {
   // ─── المنتجات ──────────────────────────────────────────────
   products: {
     async list() {
-      const { data, error } = await sb
-        .from('products')
-        .select('*')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_active', true)
-        .order('name');
+      const { data, error } = await sb.from('products').select('*')
+        .eq('company_id', currentUser.company_id).eq('is_active', true).order('name');
       if (error) throw error;
-      return data;
+      return data || [];
     },
-
     async add(p) {
       const { data, error } = await sb.from('products').insert(withCompany({
-        name:             p.name,
-        unit:             p.unit || 'عداية',
-        category:         p.category || 'خضار',
-        default_buy_price: p.buyPrice || 0,
-        default_sell_price: p.sellPrice || 0,
-        low_stock_alert:  p.lowStockAlert || 5
+        name: p.name, unit: p.unit || 'عداية', category: p.category || 'خضار',
+        default_buy_price: p.buyPrice || 0, default_sell_price: p.sellPrice || 0,
+        low_stock_alert: p.lowStockAlert || 5
       })).select().single();
       if (error) throw error;
       return data;
     },
-
     async update(id, updates) {
-      const { data, error } = await sb.from('products')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('products').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
-
     async delete(id) {
-      const { error } = await sb.from('products')
-        .update({ is_active: false }).eq('id', id)
+      const { error } = await sb.from('products').update({ is_active: false }).eq('id', id)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     }
@@ -344,14 +237,11 @@ const API = {
   // ─── الموظفون ──────────────────────────────────────────────
   employees: {
     async list() {
-      const { data, error } = await sb
-        .from('employees')
+      const { data, error } = await sb.from('employees')
         .select('*, absences:employee_absences(*)')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_active', true)
-        .order('name');
+        .eq('company_id', currentUser.company_id).eq('is_active', true).order('name');
       if (error) throw error;
-      return data;
+      return data || [];
     },
     async add(e) {
       const { data, error } = await sb.from('employees').insert(withCompany({
@@ -361,21 +251,19 @@ const API = {
       return data;
     },
     async update(id, updates) {
-      const { data, error } = await sb.from('employees')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('employees').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
     async delete(id) {
-      const { error } = await sb.from('employees')
-        .update({ is_active: false }).eq('id', id)
+      const { error } = await sb.from('employees').update({ is_active: false }).eq('id', id)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
     async addAbsence(empId, date, deduction) {
-      const { error } = await sb.from('employee_absences').insert({ employee_id: empId, absent_date: date, deduction_amount: deduction });
+      const { error } = await sb.from('employee_absences')
+        .insert({ employee_id: empId, absent_date: date, deduction_amount: deduction || 0 });
       if (error) throw error;
     },
     async deleteAbsence(absId) {
@@ -384,60 +272,55 @@ const API = {
     }
   },
 
-  // ─── الشركاء (Supabase) ────────────────────────────────────
+  // ─── الشركاء ───────────────────────────────────────────────
   partners: {
     async list() {
-      const { data, error } = await sb
-        .from('partners')
+      const { data, error } = await sb.from('partners')
         .select('*, absences:partner_absences(*), payments:partner_payments(*), profits:partner_profits(*)')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_active', true)
-        .order('name');
+        .eq('company_id', currentUser.company_id).eq('is_active', true).order('name');
       if (error) throw error;
       return data || [];
     },
     async add(p) {
       const { data, error } = await sb.from('partners').insert(withCompany({
-        name: p.name, phone: p.phone || null,
-        daily_expense: p.daily || 0, profit_pct: p.profit || 0,
-        bank_account: p.bank || null, post_account: p.post || null,
-        vodafone_cash: p.voda || null
+        name: p.name, phone: p.phone || null, daily_expense: p.daily || 0,
+        profit_pct: p.profit || 0, bank_account: p.bank || null,
+        post_account: p.post || null, vodafone_cash: p.voda || null
       })).select().single();
       if (error) throw error;
       return data;
     },
     async update(id, updates) {
-      const { data, error } = await sb.from('partners')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('partners').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
     async delete(id) {
-      const { error } = await sb.from('partners')
-        .update({ is_active: false }).eq('id', id)
+      const { error } = await sb.from('partners').update({ is_active: false }).eq('id', id)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
-    async addAbsence(partnerId, date) {
-      const { error } = await sb.from('partner_absences').insert({ partner_id: partnerId, absent_date: date });
+    async addAbsence(pid, date) {
+      const { error } = await sb.from('partner_absences').insert({ partner_id: pid, absent_date: date });
       if (error) throw error;
     },
     async deleteAbsence(id) {
       const { error } = await sb.from('partner_absences').delete().eq('id', id);
       if (error) throw error;
     },
-    async addPayment(partnerId, amount, note, date) {
-      const { error } = await sb.from('partner_payments').insert({ partner_id: partnerId, amount, note: note || '', payment_date: date });
+    async addPayment(pid, amount, note, date) {
+      const { error } = await sb.from('partner_payments')
+        .insert({ partner_id: pid, amount, note: note || '', payment_date: date });
       if (error) throw error;
     },
     async deletePayment(id) {
       const { error } = await sb.from('partner_payments').delete().eq('id', id);
       if (error) throw error;
     },
-    async addProfit(partnerId, amount, note, date) {
-      const { error } = await sb.from('partner_profits').insert({ partner_id: partnerId, amount, note: note || '', profit_date: date });
+    async addProfit(pid, amount, note, date) {
+      const { error } = await sb.from('partner_profits')
+        .insert({ partner_id: pid, amount, note: note || '', profit_date: date });
       if (error) throw error;
     },
     async deleteProfit(id) {
@@ -446,36 +329,29 @@ const API = {
     }
   },
 
-  // ─── المحلات (Supabase) ────────────────────────────────────
+  // ─── المحلات ───────────────────────────────────────────────
   shops: {
     async list() {
-      const { data, error } = await sb
-        .from('shops')
-        .select('*, lahu:shop_lahu(*), alihi:shop_alihi(*)')
-        .eq('company_id', currentUser.company_id)
-        .eq('is_active', true)
-        .order('name');
+      const { data, error } = await sb.from('shops')
+        .select('*, lahu:shop_lahu(*)')
+        .eq('company_id', currentUser.company_id).eq('is_active', true).order('name');
       if (error) throw error;
-      return data || [];
+      return (data || []).map(s => ({ ...s, alihi: [] }));
     },
     async add(s) {
-      const { data, error } = await sb.from('shops').insert(withCompany({
-        name: s.name, phone: s.phone || null
-      })).select().single();
+      const { data, error } = await sb.from('shops')
+        .insert(withCompany({ name: s.name, phone: s.phone || null })).select().single();
       if (error) throw error;
       return data;
     },
     async update(id, updates) {
-      const { data, error } = await sb.from('shops')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('shops').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
     async delete(id) {
-      const { error } = await sb.from('shops')
-        .update({ is_active: false }).eq('id', id)
+      const { error } = await sb.from('shops').update({ is_active: false }).eq('id', id)
         .eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
@@ -489,77 +365,64 @@ const API = {
     }
   },
 
-  // ─── المدفوعات والخزنة ────────────────────────────────────
+  // ─── المدفوعات ────────────────────────────────────────────
   payments: {
     async list(date) {
+      // ✅ بدون supplier join — نُضيف اسم المورد من store لاحقاً
       let q = sb.from('payments')
-        .select('*, customer:customers(name), supplier:suppliers(name)')
+        .select('*, customer:customers(name)')
         .eq('company_id', currentUser.company_id)
         .order('created_at', { ascending: false });
       if (date) q = q.eq('payment_date', date);
       const { data, error } = await q;
       if (error) throw error;
-      return data;
+      return (data || []).map(p => {
+        if (p.supplier_id) {
+          const supp = (store.supps || []).find(s => s.id === p.supplier_id);
+          p.supplier = supp ? { name: supp.name } : null;
+        }
+        return p;
+      });
     },
-
     async addCollection(p) {
       const { data, error } = await sb.from('payments').insert(withCompany({
-        payment_date:    p.date || new Date().toISOString().slice(0,10),
-        customer_id:     p.customerId || null,
-        amount:          p.amount,
-        discount_amount: p.discount || 0,
-        description:     p.description || 'تحصيل',
-        payment_type:    'collection',
-        direction:       'in',
-        created_by:      currentUser.id
+        payment_date: p.date || new Date().toISOString().slice(0,10),
+        customer_id: p.customerId || null, amount: p.amount,
+        discount_amount: p.discount || 0, description: p.description || 'تحصيل',
+        payment_type: 'collection', direction: 'in', created_by: currentUser.id
       })).select().single();
       if (error) throw error;
       return data;
     },
-
-    // ✅ تحصيل نقدي (بيعة نقدية مباشرة للخزنة)
     async addCashSaleCollection(p) {
       const { data, error } = await sb.from('payments').insert(withCompany({
-        payment_date:    p.date || new Date().toISOString().slice(0,10),
-        customer_id:     null,
-        amount:          p.amount,
-        discount_amount: 0,
-        description:     p.description || `بيعة نقدية — ${p.productName || ''}`,
-        payment_type:    'cash_sale',
-        direction:       'in',
-        created_by:      currentUser.id
+        payment_date: p.date || new Date().toISOString().slice(0,10),
+        customer_id: null, amount: p.amount, discount_amount: 0,
+        description: `بيعة نقدية — ${p.productName || ''}`,
+        payment_type: 'cash_sale', direction: 'in', created_by: currentUser.id
       })).select().single();
       if (error) throw error;
       return data;
     },
-
     async addExpense(p) {
       const { data, error } = await sb.from('payments').insert(withCompany({
-        payment_date:    p.date || new Date().toISOString().slice(0,10),
-        supplier_id:     p.supplierId || null,
-        amount:          p.amount,
-        discount_amount: 0,
-        description:     p.description || 'مصروف',
-        payment_type:    p.type || 'expense',
-        direction:       'out',
-        created_by:      currentUser.id
+        payment_date: p.date || new Date().toISOString().slice(0,10),
+        supplier_id: p.supplierId || null, amount: p.amount, discount_amount: 0,
+        description: p.description || 'مصروف', payment_type: p.type || 'expense',
+        direction: 'out', created_by: currentUser.id
       })).select().single();
       if (error) throw error;
       return data;
     },
-
-    // ✅ تعديل حركة خزنة
     async update(id, updates) {
-      const { data, error } = await sb.from('payments')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('payments').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
-
     async delete(id) {
-      const { error } = await sb.from('payments').delete().eq('id', id);
+      const { error } = await sb.from('payments').delete().eq('id', id)
+        .eq('company_id', currentUser.company_id);
       if (error) throw error;
     }
   },
@@ -567,74 +430,51 @@ const API = {
   // ─── الفواتير ──────────────────────────────────────────────
   invoices: {
     async list() {
-      const { data, error } = await sb
-        .from('invoices')
+      const { data, error } = await sb.from('invoices')
         .select('*, supplier:suppliers(name), customer:customers(name), items:invoice_items(*, product:products(name,unit))')
         .eq('company_id', currentUser.company_id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+      return data || [];
     },
-
     async create(inv) {
       const { data: invData, error } = await sb.from('invoices').insert(withCompany({
-        invoice_number:  `INV-${Date.now()}`,
-        invoice_type:    inv.type || 'supplier',
-        supplier_id:     inv.supplierId || null,
-        customer_id:     inv.customerId || null,
-        invoice_date:    inv.date || new Date().toISOString().slice(0,10),
-        subtotal:        inv.subtotal || 0,
-        commission_7pct: inv.commission || 0,
-        noulon_total:    inv.noulon || 0,
-        mashal_total:    inv.mashal || 0,
-        discount:        inv.discount || 0,
-        total_amount:    inv.total || 0,
-        paid_amount:     0,
-        payment_status:  'unpaid'
+        invoice_number: `INV-${Date.now()}`, invoice_type: inv.type || 'supplier',
+        supplier_id: inv.supplierId || null, customer_id: inv.customerId || null,
+        invoice_date: inv.date || new Date().toISOString().slice(0,10),
+        subtotal: inv.subtotal || 0, commission_7pct: inv.commission || 0,
+        noulon_total: inv.noulon || 0, mashal_total: inv.mashal || 0,
+        discount: inv.discount || 0, total_amount: inv.total || 0,
+        paid_amount: 0, payment_status: 'unpaid'
       })).select().single();
       if (error) throw error;
-
       if (inv.items?.length) {
-        const items = inv.items.map(item => ({
-          invoice_id: invData.id,
-          product_id: item.productId,
-          batch_id:   item.batchId || null,
-          quantity:   item.quantity || 0,
-          weight_kg:  item.weightKg || 0,
-          unit_price: item.unitPrice || 0,
-          total:      item.total || (item.quantity * item.unitPrice)
-        }));
-        await sb.from('invoice_items').insert(items);
+        await sb.from('invoice_items').insert(inv.items.map(item => ({
+          invoice_id: invData.id, product_id: item.productId, batch_id: item.batchId || null,
+          quantity: item.quantity || 0, weight_kg: item.weightKg || 0,
+          unit_price: item.unitPrice || 0, total: item.total || 0
+        })));
       }
       return invData;
     },
-
-    // ✅ تعديل فاتورة
     async update(id, updates) {
-      const { data, error } = await sb.from('invoices')
-        .update(updates).eq('id', id)
-        .eq('company_id', currentUser.company_id)
-        .select().single();
+      const { data, error } = await sb.from('invoices').update(updates).eq('id', id)
+        .eq('company_id', currentUser.company_id).select().single();
       if (error) throw error;
       return data;
     },
-
     async updateDeductions(id, d) {
-      const total = (d.subtotal || 0) - (d.commission || 0) - (d.noulon || 0) - (d.mashal || 0) - (d.discount || 0);
+      const total = (d.subtotal||0)-(d.commission||0)-(d.noulon||0)-(d.mashal||0)-(d.discount||0);
       const { error } = await sb.from('invoices').update({
-        subtotal:        d.subtotal,
-        commission_7pct: d.commission,
-        noulon_total:    d.noulon,
-        mashal_total:    d.mashal,
-        discount:        d.discount,
-        total_amount:    total
+        subtotal: d.subtotal, commission_7pct: d.commission, noulon_total: d.noulon,
+        mashal_total: d.mashal, discount: d.discount, total_amount: total
       }).eq('id', id).eq('company_id', currentUser.company_id);
       if (error) throw error;
     },
-
     async delete(id) {
       await sb.from('invoice_items').delete().eq('invoice_id', id);
-      const { error } = await sb.from('invoices').delete().eq('id', id);
+      const { error } = await sb.from('invoices').delete().eq('id', id)
+        .eq('company_id', currentUser.company_id);
       if (error) throw error;
     }
   },
@@ -643,23 +483,17 @@ const API = {
   subscriptions: {
     async submit(p) {
       const { data, error } = await sb.from('subscriptions').insert(withCompany({
-        plan:             p.plan,
-        amount:           p.amount,
-        payment_method:   p.method,
-        transaction_id:   p.transactionId,
-        extra_data:       JSON.stringify(p.extraData || {}),
-        status:           'pending'
+        plan: p.plan, amount: p.amount, payment_method: p.method,
+        transaction_id: p.transactionId, extra_data: JSON.stringify(p.extraData || {}), status: 'pending'
       })).select().single();
       if (error) throw error;
       return data;
     },
     async getAll() {
-      const { data, error } = await sb
-        .from('subscriptions')
-        .select('*, company:companies(name)')
-        .order('created_at', { ascending: false });
+      const { data, error } = await sb.from('subscriptions')
+        .select('*, company:companies(name)').order('created_at', { ascending: false });
       if (error) throw error;
-      return data;
+      return data || [];
     },
     async confirm(subId, companyId, plan, endsAt) {
       await sb.from('subscriptions').update({ status: 'confirmed' }).eq('id', subId);
@@ -670,14 +504,12 @@ const API = {
     }
   },
 
-  // ─── الملف الشخصي والشركة ─────────────────────────────────
+  // ─── الملف الشخصي ─────────────────────────────────────────
   company: {
     async getProfile() {
-      const { data, error } = await sb
-        .from('profiles')
+      const { data, error } = await sb.from('profiles')
         .select('*, company:companies(*)')
-        .eq('id', currentUser.id)
-        .maybeSingle();
+        .eq('id', currentUser.id).maybeSingle();
       if (error) throw error;
       return data;
     }
@@ -686,25 +518,16 @@ const API = {
   // ─── الترحيلات ────────────────────────────────────────────
   tarhil: {
     async getByDate(date) {
-      const { data, error } = await sb
-        .from('daily_sales')
-        .select(`id, sale_date, customer_id, quantity, weight_kg, unit_price, total_amount, is_cash,
-          product:products(name, unit), customer:customers(name, phone)`)
-        .eq('company_id', currentUser.company_id)
-        .eq('sale_date', date)
-        .eq('is_cash', false)
-        .order('customer_id', { ascending: true })
-        .order('created_at', { ascending: true });
+      const { data, error } = await sb.from('daily_sales')
+        .select('id, sale_date, customer_id, quantity, weight_kg, unit_price, total_amount, is_cash, product:products(name,unit), customer:customers(name,phone)')
+        .eq('company_id', currentUser.company_id).eq('sale_date', date).eq('is_cash', false)
+        .order('customer_id', { ascending: true });
       if (error) throw error;
       return data || [];
     },
     async getDayTotal(date) {
-      const { data, error } = await sb
-        .from('daily_sales')
-        .select('total_amount')
-        .eq('company_id', currentUser.company_id)
-        .eq('sale_date', date)
-        .eq('is_cash', false);
+      const { data, error } = await sb.from('daily_sales').select('total_amount')
+        .eq('company_id', currentUser.company_id).eq('sale_date', date).eq('is_cash', false);
       if (error) throw error;
       return (data || []).reduce((s, x) => s + parseFloat(x.total_amount || 0), 0);
     }
