@@ -141,6 +141,13 @@ async function renderSalesTable() {
   tbody.innerHTML = html;
   _updateDayTotal(sales);
 }
+// داخل confirmInlineSale، بعد استدعاء API.sales.add، أضف:
+const updatedBatch = inv.find(b => b.batch_id === batchId);
+if (updatedBatch && parseFloat(updatedBatch.remaining_qty || 0) < 0) {
+  // التراجع عن العملية
+  await API.sales.delete(sale.id);
+  throw new Error('الكمية المباعة تتجاوز المتوفر في المخزون');
+}
 
 // ─── تفعيل/إغلاق دفعة ──────────────────────────────────────
 function toggleBatch(batchId) {
