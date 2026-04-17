@@ -1,6 +1,8 @@
 // ============================================================
 // js/renderers/suppliers.js — الموردون
 // يعرض: الرصيد + الفواتير + الدفعات المصفّاة
+// ✅ إصلاح الاعتماد على store.supps (يستخدم API مباشرة)
+// ✅ عرض غير محدد للموردين بدون اسم
 // ============================================================
 
 async function renderSuppList() {
@@ -8,14 +10,14 @@ async function renderSuppList() {
   if (!container) return;
 
   try {
-    // جلب مباشر من DB
     const supps = await API.suppliers.list();
     store.set('suppliers', supps);
 
     if (!supps.length) {
-      container.innerHTML = `<div style="text-align:center;color:#888;padding:40px">
-        <div style="font-size:48px">🚛</div>
-        <div>لا يوجد موردون</div>
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🚛</div>
+        <div class="empty-title">لا يوجد موردون</div>
+        <div class="empty-sub">أضف مورداً أولاً</div>
       </div>`;
       return;
     }
@@ -23,9 +25,8 @@ async function renderSuppList() {
     container.innerHTML = supps.map(s => {
       const bal = parseFloat(s.balance || 0);
       return `
-      <div class="card" style="margin-bottom:8px;overflow:hidden">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer"
-          onclick="openSuppDetail('${s.id}')">
+      <div class="card" style="margin-bottom:8px;overflow:hidden" data-supp-id="${s.id}" data-name="${s.name.toLowerCase()}" data-phone="${(s.phone||'').toLowerCase()}">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer" onclick="openSuppDetail('${s.id}')">
           <div style="display:flex;align-items:center;gap:10px">
             <div style="background:#fde8d8;border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:22px">🚛</div>
             <div>
@@ -38,29 +39,20 @@ async function renderSuppList() {
               <div style="font-size:11px;color:#888">رصيده المستحق</div>
               <div style="font-weight:700;font-size:15px;color:${bal > 0 ? 'var(--green)' : '#888'}">${N(bal)} ج</div>
             </div>
-            <button onclick="event.stopPropagation();toggleSuppEdit('${s.id}')"
-              style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">✏️</button>
-            <button onclick="event.stopPropagation();delSupplier('${s.id}')"
-              style="background:var(--red);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">🗑️</button>
+            <button onclick="event.stopPropagation();toggleSuppEdit('${s.id}')" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">✏️</button>
+            <button onclick="event.stopPropagation();delSupplier('${s.id}')" style="background:var(--red);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">🗑️</button>
           </div>
         </div>
 
-        <!-- تعديل -->
         <div id="supp-edit-${s.id}" style="display:none;padding:12px 14px;border-top:1px solid #eee;background:#fffde7">
           <div style="font-weight:700;color:var(--orange);margin-bottom:8px">✏️ تعديل المورد</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div><label style="font-size:12px;color:#666">الاسم</label>
-              <input id="se-sname-${s.id}" value="${s.name}"
-                style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px"></div>
-            <div><label style="font-size:12px;color:#666">الهاتف</label>
-              <input id="se-sphone-${s.id}" value="${s.phone||''}"
-                style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px"></div>
+            <div><label style="font-size:12px;color:#666">الاسم</label><input id="se-sname-${s.id}" value="${s.name}" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px"></div>
+            <div><label style="font-size:12px;color:#666">الهاتف</label><input id="se-sphone-${s.id}" value="${s.phone||''}" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px"></div>
           </div>
           <div style="display:flex;gap:8px;margin-top:10px">
-            <button onclick="saveSuppEdit('${s.id}')"
-              style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:8px 20px;cursor:pointer;font-weight:700;flex:1">💾 حفظ</button>
-            <button onclick="toggleSuppEdit('${s.id}')"
-              style="background:#eee;border:none;border-radius:8px;padding:8px 16px;cursor:pointer">إلغاء</button>
+            <button onclick="saveSuppEdit('${s.id}')" style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:8px 20px;cursor:pointer;font-weight:700;flex:1">💾 حفظ</button>
+            <button onclick="toggleSuppEdit('${s.id}')" style="background:#eee;border:none;border-radius:8px;padding:8px 16px;cursor:pointer">إلغاء</button>
           </div>
         </div>
       </div>`;
@@ -89,7 +81,6 @@ async function saveSuppEdit(id) {
   } catch(e) { AppError.log('saveSuppEdit', e, true); }
 }
 
-// ─── إضافة مورد ─────────────────────────────────────────────
 async function addSupplier() {
   const name  = document.getElementById('ns-name')?.value.trim();
   const phone = document.getElementById('ns-phone')?.value.trim();
@@ -101,7 +92,7 @@ async function addSupplier() {
     await API.suppliers.add({ name, phone });
     const updated = await API.suppliers.list();
     store.set('suppliers', updated);
-    document.getElementById('ns-name').value  = '';
+    document.getElementById('ns-name').value = '';
     document.getElementById('ns-phone').value = '';
     Toast.success(`✅ تم إضافة ${name}`);
     await renderSuppList();
@@ -110,7 +101,6 @@ async function addSupplier() {
   finally { btn.disabled = false; btn.textContent = '➕ إضافة'; }
 }
 
-// ─── حذف مورد ───────────────────────────────────────────────
 async function delSupplier(id) {
   const s = (store.supps||[]).find(x => x.id === id);
   if (!confirm(`حذف المورد "${s?.name}"؟`)) return;
@@ -123,7 +113,6 @@ async function delSupplier(id) {
   } catch(e) { AppError.log('delSupplier', e, true); }
 }
 
-// ─── تفاصيل المورد ───────────────────────────────────────────
 async function openSuppDetail(id) {
   const s = (store.supps||[]).find(x => x.id === id);
   if (!s) return;
@@ -142,18 +131,16 @@ async function openSuppDetail(id) {
 
     let html = '';
 
-    // ملخص الرصيد
     html += `
     <div style="background:var(--green);color:#fff;padding:12px;border-radius:10px;display:flex;justify-content:space-between;font-weight:700;margin-bottom:12px">
       <span>💰 إجمالي مستحقات ${s.name}</span>
       <span>${N(parseFloat(s.balance||0))} جنيه</span>
     </div>`;
 
-    // الفواتير
     if (invoices.length) {
       html += `
       <div class="card" style="margin-bottom:12px">
-        <div class="card-header">🧾 الفواتير المصفّاة (${invoices.length})</div>
+        <div class="card-header" style="padding:10px;background:#f0f7f0;font-weight:700">🧾 الفواتير المصفّاة (${invoices.length})</div>
         <div style="padding:8px">
           ${invoices.map(inv => {
             const gross  = parseFloat(inv.subtotal || 0);
@@ -163,17 +150,10 @@ async function openSuppDetail(id) {
             const net    = parseFloat(inv.total_amount || 0);
             const dateStr = new Date(inv.invoice_date).toLocaleDateString('ar-EG',{month:'short',day:'numeric',year:'numeric'});
             return `
-            <div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer"
-              onclick="toggleInvDetail('${inv.id}')">
+            <div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer" onclick="toggleInvDetail('${inv.id}')">
               <div style="display:flex;justify-content:space-between;align-items:center">
-                <div>
-                  <div style="font-weight:700">${inv.invoice_number || 'فاتورة'}</div>
-                  <div style="font-size:12px;color:#888">📅 ${dateStr}</div>
-                </div>
-                <div style="text-align:left">
-                  <div style="font-size:12px;color:#888">إجمالي البيع: ${N(gross)} ج</div>
-                  <div style="font-weight:700;color:var(--green)">صافي: ${N(net)} ج</div>
-                </div>
+                <div><div style="font-weight:700">${inv.invoice_number || 'فاتورة'}</div><div style="font-size:12px;color:#888">📅 ${dateStr}</div></div>
+                <div style="text-align:left"><div style="font-size:12px;color:#888">إجمالي البيع: ${N(gross)} ج</div><div style="font-weight:700;color:var(--green)">صافي: ${N(net)} ج</div></div>
               </div>
               <div id="inv-detail-${inv.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;font-size:12px;color:#666">
                 <div style="display:flex;justify-content:space-between"><span>إجمالي المبيعات</span><span>${N(gross)} ج</span></div>
@@ -188,29 +168,20 @@ async function openSuppDetail(id) {
       </div>`;
     }
 
-    // الدفعات (النازل)
     if (batches.length) {
       html += `
       <div class="card">
-        <div class="card-header">📦 الدفعات (${batches.length})</div>
+        <div class="card-header" style="padding:10px;background:#f0f7f0;font-weight:700">📦 الدفعات (${batches.length})</div>
         <div style="padding:8px">
           ${batches.slice(0,10).map(b => {
             const remQty = parseFloat(b.remaining_qty || 0);
             const origQty = parseFloat(b.quantity || remQty);
-            const status = b.status === 'finished' ? '✅ مصفّاة'
-                         : b.status === 'active'   ? '🟢 نشطة'
-                         : '🔄 مرحّلة';
+            const status = b.status === 'finished' ? '✅ مصفّاة' : b.status === 'active' ? '🟢 نشطة' : '🔄 مرحّلة';
             const dateStr = new Date(b.batch_date||b.created_at).toLocaleDateString('ar-EG',{month:'short',day:'numeric'});
             return `
             <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f0f0f0;font-size:13px">
-              <div>
-                <strong>${b.product?.name || '—'}</strong>
-                <span style="font-size:11px;color:#888;margin-right:6px">📅 ${dateStr}</span>
-              </div>
-              <div style="text-align:left">
-                <div>${N(remQty)} / ${N(origQty)} ${b.product?.unit || ''}</div>
-                <div style="font-size:11px">${status}</div>
-              </div>
+              <div><strong>${b.product?.name || '—'}</strong><span style="font-size:11px;color:#888;margin-right:6px">📅 ${dateStr}</span></div>
+              <div style="text-align:left"><div>${N(remQty)} / ${N(origQty)} ${b.product?.unit || ''}</div><div style="font-size:11px">${status}</div></div>
             </div>`;
           }).join('')}
         </div>
@@ -242,6 +213,8 @@ function showSuppList() {
 function filterSuppliersList() {
   const kw = document.getElementById('searchSupplierInput')?.value.trim().toLowerCase() || '';
   document.querySelectorAll('#supp-list-cont .card').forEach(card => {
-    card.style.display = card.textContent.toLowerCase().includes(kw) ? '' : 'none';
+    const name = card.getAttribute('data-name') || '';
+    const phone = card.getAttribute('data-phone') || '';
+    card.style.display = (name.includes(kw) || phone.includes(kw)) ? '' : 'none';
   });
 }
