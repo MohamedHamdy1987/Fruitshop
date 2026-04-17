@@ -1,9 +1,9 @@
 // ============================================================
 // js/renderers/sales.js — نظام الوساطة
 // ✅ البيع من الدفعة
+// ✅ عرض المبيعات مع المورد والصنف والكمية والسعر والإجمالي
 // ✅ فاتورة تلقائية فقط عند remaining_qty = 0
-// ✅ لا فاتورة عند كل بيعة
-// ✅ البيانات تُجلب من DB — لا تختفي
+// ✅ لا تختفي الدفعة إلا عند انتهاء الكمية
 // ============================================================
 
 let _activeBatchId = null;
@@ -13,7 +13,6 @@ async function renderSalesTable() {
   if (!tbody) return;
 
   try {
-    // ─── جلب مباشر من DB كل مرة ────────────────────────────
     const [inv, sales] = await Promise.all([
       API.inventory.list(),
       API.sales.list(store._state.currentDate)
@@ -33,50 +32,45 @@ async function renderSalesTable() {
     const batchMap = new Map();
     inv.forEach(b => batchMap.set(b.id, b));
 
-    // أضف دفعات من المبيعات لو لم تكن في المخزون (finished batches)
+    // إضافة الدفعات المنتهية من المبيعات (للدفعات المصفاة)
     const batchIdsInSales = [...new Set(sales.map(s => s.batch_id).filter(Boolean))];
     const missingIds = batchIdsInSales.filter(id => !batchMap.has(id));
-
     if (missingIds.length) {
-      // جلب الدفعات المنتهية من DB
       const { data: finishedBatches } = await sb.from('incoming_batches')
         .select('*, product:products(name,unit), supplier:suppliers(name)')
         .in('id', missingIds)
         .eq('company_id', currentUser.company_id);
-
       (finishedBatches || []).forEach(b => {
         batchMap.set(b.id, {
           ...b,
           batch_id: b.id,
-          product_name:  b.product?.name  || 'منتج',
-          supplier_name: b.supplier?.name || '—',
-          unit:          b.product?.unit  || 'وحدة'
+          product_name: b.product?.name || 'منتج',
+          supplier_name: b.supplier?.name || 'غير محدد',
+          unit: b.product?.unit || 'وحدة'
         });
       });
     }
 
     const allBatches = Array.from(batchMap.values());
-
     let html = '';
 
-    allBatches.forEach(batch => {
-      const batchId    = batch.id || batch.batch_id;
+    for (const batch of allBatches) {
+      const batchId = batch.id || batch.batch_id;
       const batchSales = sales.filter(s => s.batch_id === batchId);
-      const soldQty    = batchSales.reduce((s, x) => s + parseFloat(x.quantity  || 0), 0);
-      const soldWt     = batchSales.reduce((s, x) => s + parseFloat(x.weight_kg || 0), 0);
+      const soldQty = batchSales.reduce((s, x) => s + parseFloat(x.quantity || 0), 0);
+      const soldWt = batchSales.reduce((s, x) => s + parseFloat(x.weight_kg || 0), 0);
       const batchTotal = batchSales.reduce((s, x) => s + parseFloat(x.total_amount || 0), 0);
-      const remQty     = parseFloat(batch.remaining_qty || 0);
-      const origQty    = parseFloat(batch.quantity || remQty + soldQty);
-      const isOpen     = _activeBatchId === batchId;
-      const isDone     = remQty <= 0 || batch.status === 'finished';
-      const date       = new Date(batch.batch_date || batch.created_at || new Date())
-                         .toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+      const remQty = parseFloat(batch.remaining_qty || 0);
+      const origQty = parseFloat(batch.quantity || remQty + soldQty);
+      const isOpen = (_activeBatchId === batchId);
+      const isDone = remQty <= 0 || batch.status === 'finished';
+      const date = new Date(batch.batch_date || batch.created_at || new Date())
+        .toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
 
       html += `
-      <tr onclick="toggleBatch('${batchId}')"
-        style="cursor:pointer;${isDone ? 'background:#f9f9f9;opacity:.85' : ''}">
+      <tr onclick="toggleBatch('${batchId}')" style="cursor:pointer; ${isDone ? 'background:#f9f9f9;opacity:.85' : ''}">
         <td>${date}</td>
-        <td>${batch.supplier_name || '—'}</td>
+        <td><strong>${batch.supplier_name || 'غير محدد'}</strong></td>
         <td><strong>${batch.product_name}</strong><br><small>${batch.unit}</small></td>
         <td>${N(origQty)}</td>
         <td>${N(soldQty)}${soldWt > 0 ? `<br><small>${N(soldWt)}ك</small>` : ''}</td>
@@ -92,12 +86,13 @@ async function renderSalesTable() {
       </tr>`;
 
       if (isOpen) {
+        // عرض تفاصيل المبيعات
         const salesRows = batchSales.map(sl => {
           const custName = sl.customer?.name || (store.custs||[]).find(c=>c.id===sl.customer_id)?.name;
-          const isCash   = sl.is_cash || !sl.customer_id;
+          const isCash = sl.is_cash || !sl.customer_id;
           return `
           <tr style="background:#fafff8;font-size:13px" id="sale-row-${sl.id}">
-            <td>${sl.quantity > 0 ? N(sl.quantity) : '—'}</td>
+            <td style="padding:5px">${sl.quantity > 0 ? N(sl.quantity) : '—'}</td>
             <td>${isCash
               ? '<span style="color:var(--green)">نقدي 💵</span>'
               : `<span style="color:var(--blue)">${custName || 'عميل'}</span>`}
@@ -111,7 +106,7 @@ async function renderSalesTable() {
               <button onclick="deleteSale('${sl.id}','${batchId}')"
                 style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px;margin-right:3px">🗑️</button>
             </td>
-          </tr>`;
+           </tr>`;
         }).join('');
 
         html += `
@@ -141,14 +136,13 @@ async function renderSalesTable() {
                 </tr></tfoot>
               </table>` : '<p style="color:#888;text-align:center;padding:10px">لا توجد مبيعات بعد</p>'}
 
-              <!-- حاوية الإضافة والتعديل -->
               <div id="sf-${batchId}" style="margin-top:8px"></div>
               <div id="se-${batchId}" style="margin-top:8px"></div>
             </div>
           </td>
         </tr>`;
       }
-    });
+    }
 
     tbody.innerHTML = html || `<tr><td colspan="9" style="text-align:center;color:#888;padding:20px">لا توجد دفعات</td></tr>`;
     _updateDayTotal(sales);
@@ -161,7 +155,6 @@ async function renderSalesTable() {
   }
 }
 
-// ─── فتح/إغلاق دفعة ──────────────────────────────────────────
 function toggleBatch(batchId) {
   _activeBatchId = _activeBatchId === batchId ? null : batchId;
   renderSalesTable();
@@ -210,8 +203,7 @@ function openInlineSaleForm(batchId, maxQty) {
       </div>
       <div>
         <label style="font-size:12px;color:#666">العميل</label>
-        <select id="sf-cust-${batchId}"
-          style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px">${custOpts}</select>
+        <select id="sf-cust-${batchId}" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px">${custOpts}</select>
       </div>
     </div>
     <div style="font-size:12px;color:#888;margin:6px 0">متبقي: ${N(maxQty)} ${unit}</div>
@@ -306,7 +298,6 @@ async function confirmSale(batchId, maxQty) {
 // ─── تصفية الدفعة عند النفاد ─────────────────────────────────
 async function _settleBatch(batchId, batch, updatedBatch) {
   try {
-    // جلب كل مبيعات الدفعة
     const batchSales = await API.sales.listByBatch(batchId);
     if (!batchSales.length) return;
 
@@ -316,17 +307,15 @@ async function _settleBatch(batchId, batch, updatedBatch) {
     const mashal     = parseFloat(updatedBatch?.mashal || batch.mashal || 0);
     const net        = totalSales - commission - noulon - mashal;
 
-    const result = await API.invoices.createSettlement(batchId, {
+    await API.invoices.createSettlement(batchId, {
       ...batch,
       noulon, mashal,
       supplier_id: updatedBatch?.supplier_id || batch.supplier_id
     }, batchSales);
 
-    // تحديث الموردين في store
     const updatedSupps = await API.suppliers.list();
     store.set('suppliers', updatedSupps);
 
-    // إشعار واضح
     Toast.success(
       `🧾 تصفية تلقائية!\n` +
       `${batch.product_name} — ${batch.supplier_name}\n` +
@@ -428,8 +417,14 @@ async function deleteSale(saleId, batchId) {
 
 async function deleteBatchSales(batchId) {
   const batch = (store.inv||[]).find(b => b.id === batchId || b.batch_id === batchId);
-  if (!confirm(`حذف دفعة ${batch?.product_name || ''}؟`)) return;
+  if (!confirm(`حذف دفعة ${batch?.product_name || ''} وجميع مبيعاتها؟`)) return;
   try {
+    // حذف المبيعات المرتبطة أولاً
+    const salesToDelete = (store.sales || []).filter(s => s.batch_id === batchId);
+    for (const sale of salesToDelete) {
+      await API.sales.delete(sale.id);
+    }
+    // ثم حذف الدفعة
     await API.inventory.delete(batchId);
     Toast.success('تم الحذف');
     await renderSalesTable();
