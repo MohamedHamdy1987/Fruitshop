@@ -2,6 +2,7 @@
 // renderers/khazna.js — محدَّث
 // ✅ زر تعديل ومسح على كل حركة تحصيل ومصروف
 // ✅ البيعات النقدية تظهر تلقائياً في التحصيلات
+// ✅ إصلاح مشكلة القطعية (لا تخصم الرصيد مرتين)
 // ============================================================
 
 // ─── تسجيل تحصيل ────────────────────────────────────────────
@@ -16,15 +17,18 @@ async function addCollection() {
   const cust = (store.custs||[]).find(c => c.id===custId||c.id==custId);
   const btn = event.target; btn.disabled=true; btn.textContent='...';
   try {
+    // تسجيل الدفعة الأساسية (بدون discount_amount لتجنب الخصم المزدوج)
     if (amount > 0) {
       await API.payments.addCollection({
         customerId: custId, amount, discount: 0,
         description: note || 'تحصيل', date: store._state.currentDate
       });
     }
+    // تسجيل القطعية: نعتبرها مبلغاً إضافياً مخفضاً (discount = 0)
+    // حتى لا يخصم trigger الرصيد مرتين
     if (discount > 0) {
       await API.payments.addCollection({
-        customerId: custId, amount: discount, discount,
+        customerId: custId, amount: discount, discount: 0,
         description: note ? `قطعية — ${note}` : 'قطعية', date: store._state.currentDate
       });
     }
@@ -52,14 +56,14 @@ function renderCollections() {
   let html = '';
 
   if (cash.length) {
-    html += `💵 نقديات وبيعات نقدية`;
+    html += `<div style="font-weight:700;margin:8px 0 4px;color:var(--green)">💵 نقديات وبيعات نقدية</div>`;
     cash.forEach(p => {
       html += _paymentRow(p, null);
     });
   }
 
   if (creds.length) {
-    html += `📋 تسديدات العملاء`;
+    html += `<div style="font-weight:700;margin:12px 0 4px;color:var(--blue)">📋 تسديدات العملاء</div>`;
     creds.forEach(p => {
       const cust = (store.custs||[]).find(c => c.id===p.customer_id);
       html += _paymentRow(p, cust);
@@ -75,24 +79,27 @@ function _paymentRow(p, cust) {
   const label = cust ? `${cust.name} — ${p.description||''}` :
                 (p.payment_type==='cash_sale' ? `🛒 ${p.description||'بيعة نقدية'}` : p.description||'-');
   return `
-  
-    ${label}
-    ${N(p.amount)} ج
-    ✏️
-    🗑️
-  
-  
-    
-      المبلغ
-        
-      البيان
-        
-    
-    
-      💾 حفظ
-      إلغاء
-    
-  `;
+  <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:6px;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px">
+      <div>
+        <div style="font-weight:600;font-size:13px">${label}</div>
+        <div style="font-size:11px;color:#888">${new Date(p.payment_date).toLocaleDateString('ar-EG')}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <strong style="color:var(--green)">${N(p.amount)} ج</strong>
+        <button onclick="openPaymentEdit('${p.id}','${p.direction}')" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px">✏️</button>
+        <button onclick="delPayment('${p.id}')" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px">🗑️</button>
+      </div>
+    </div>
+    <div id="pay-edit-${p.id}" style="display:none;padding:10px;border-top:1px solid #eee;background:#fffde7">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="flex:1"><label style="font-size:11px">المبلغ</label><input id="pe-amt-${p.id}" value="${p.amount}" type="number" step="0.01" style="width:100%;padding:5px;border-radius:5px;border:1px solid #ddd"></div>
+        <div style="flex:2"><label style="font-size:11px">البيان</label><input id="pe-desc-${p.id}" value="${p.description||''}" style="width:100%;padding:5px;border-radius:5px;border:1px solid #ddd"></div>
+        <div><button onclick="savePaymentEdit('${p.id}')" style="background:var(--orange);color:#fff;border:none;border-radius:5px;padding:6px 12px;cursor:pointer">💾 حفظ</button></div>
+        <div><button onclick="openPaymentEdit('${p.id}')" style="background:#eee;border:none;border-radius:5px;padding:6px 12px;cursor:pointer">إلغاء</button></div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function openPaymentEdit(id, dir) {
@@ -159,27 +166,27 @@ function renderExpenses() {
   el.innerHTML = today.map(e => {
     const supp = (store.supps||[]).find(s => s.id===e.supplier_id);
     return `
-    
-      
-        ${e.description||'-'}
-        ${e.supplier?.name||supp?.name ? `🚛 ${e.supplier?.name||supp?.name}` : ''}
-      
-      ${N(e.amount)} ج
-      ✏️
-      🗑️
-    
-    
-      
-        المبلغ
-          
-        البيان
-          
-      
-      
-        💾 حفظ
-        إلغاء
-      
-    `;
+    <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:6px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px">
+        <div>
+          <div style="font-weight:600;font-size:13px">${e.description||'-'}</div>
+          <div style="font-size:11px;color:#888">${e.supplier?.name||supp?.name ? `🚛 ${e.supplier?.name||supp?.name}` : ''} · ${new Date(e.payment_date).toLocaleDateString('ar-EG')}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <strong style="color:var(--red)">${N(e.amount)} ج</strong>
+          <button onclick="openPaymentEdit('${e.id}','out')" style="background:var(--blue);color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px">✏️</button>
+          <button onclick="delPayment('${e.id}')" style="background:var(--red);color:#fff;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:11px">🗑️</button>
+        </div>
+      </div>
+      <div id="pay-edit-${e.id}" style="display:none;padding:10px;border-top:1px solid #eee;background:#fffde7">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div style="flex:1"><label style="font-size:11px">المبلغ</label><input id="pe-amt-${e.id}" value="${e.amount}" type="number" step="0.01" style="width:100%;padding:5px;border-radius:5px;border:1px solid #ddd"></div>
+          <div style="flex:2"><label style="font-size:11px">البيان</label><input id="pe-desc-${e.id}" value="${e.description||''}" style="width:100%;padding:5px;border-radius:5px;border:1px solid #ddd"></div>
+          <div><button onclick="savePaymentEdit('${e.id}')" style="background:var(--orange);color:#fff;border:none;border-radius:5px;padding:6px 12px;cursor:pointer">💾 حفظ</button></div>
+          <div><button onclick="openPaymentEdit('${e.id}')" style="background:#eee;border:none;border-radius:5px;padding:6px 12px;cursor:pointer">إلغاء</button></div>
+        </div>
+      </div>
+    </div>`;
   }).join('');
 
   _updateExpTotal(today.reduce((s,e)=>s+parseFloat(e.amount||0),0));
