@@ -1,6 +1,8 @@
 // ============================================================
 // js/renderers/tarhil.js — الترحيلات (مبيعات اليوم بالتفصيل)
 // عرض لكل عميل: الأصناف × الكميات × الأسعار = الإجمالي
+// ✅ إجمالي اليومية لكل عميل
+// ✅ عند الضغط على اليومية → تظهر التفاصيل
 // ============================================================
 
 async function renderTarhil() {
@@ -9,11 +11,21 @@ async function renderTarhil() {
   container.innerHTML = '<div style="text-align:center;padding:20px;color:#888">جاري التحميل...</div>';
 
   const picker = document.getElementById('tarhil-date-picker');
-  const date   = picker?.value || store._state.currentDate;
+  let date = picker?.value || store._state.currentDate;
+
+  // إذا كان هناك عميل محدد من صفحة العملاء، استخدم تاريخه
+  if (window._tarhilDate) {
+    date = window._tarhilDate;
+    if (picker) picker.value = date;
+    window._tarhilDate = null;
+  }
+  const customerFilter = window._tarhilCustomerId;
+  if (customerFilter) {
+    window._tarhilCustomerId = null;
+  }
 
   try {
-    // جلب كل مبيعات اليوم من DB مباشرة
-    const { data: allSales, error } = await sb.from('daily_sales')
+    let query = sb.from('daily_sales')
       .select(`
         id, batch_id, sale_date,
         customer_id, quantity, weight_kg, unit_price, total_amount, is_cash,
@@ -25,6 +37,11 @@ async function renderTarhil() {
       .order('customer_id', { ascending: true })
       .order('created_at', { ascending: true });
 
+    if (customerFilter) {
+      query = query.eq('customer_id', customerFilter);
+    }
+
+    const { data: allSales, error } = await query;
     if (error) throw error;
     const sales = allSales || [];
 
@@ -85,7 +102,7 @@ async function renderTarhil() {
     if (cashSales.length) {
       html += `
       <div class="card" style="margin-bottom:12px">
-        <div class="card-header" style="background:#e8f8f0;color:var(--green)">
+        <div class="card-header" style="background:#e8f8f0;color:var(--green);padding:10px 14px;border-bottom:2px solid var(--green);">
           💵 المبيعات النقدية (${cashSales.length} عملية)
         </div>
         <div style="padding:8px">
@@ -101,7 +118,7 @@ async function renderTarhil() {
             </div>
             <strong style="color:var(--green)">${N(s.total_amount)} ج</strong>
           </div>`).join('')}
-          <div style="display:flex;justify-content:space-between;padding:8px 4px;font-weight:700;color:var(--green)">
+          <div style="display:flex;justify-content:space-between;padding:8px 4px;font-weight:700;color:var(--green);border-top:2px solid #eee;margin-top:4px">
             <span>الإجمالي النقدي</span>
             <span>${N(cashTotal)} ج</span>
           </div>
@@ -118,7 +135,8 @@ async function renderTarhil() {
 
         html += `
         <div class="card" style="margin-bottom:10px">
-          <div style="background:#e8f4fd;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-radius:10px 10px 0 0">
+          <div style="background:#e8f4fd;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-radius:10px 10px 0 0;cursor:pointer"
+               onclick="toggleCustomerDetail('${group.customerId}')">
             <div>
               <div style="font-weight:700;font-size:15px">👤 ${group.customer?.name || 'عميل'}</div>
               ${group.customer?.phone ? `<div style="font-size:12px;color:#888">${group.customer.phone}</div>` : ''}
@@ -129,8 +147,8 @@ async function renderTarhil() {
             </div>
           </div>
 
-          <!-- تفاصيل الأصناف -->
-          <div style="padding:8px 14px">
+          <!-- تفاصيل الأصناف (قابلة للطي) -->
+          <div id="cust-detail-${group.customerId}" style="display:none;padding:8px 14px;border-top:1px solid #eee">
             ${group.items.map(s => {
               const qtyStr = s.quantity > 0
                 ? `${N(s.quantity)} ${s.product?.unit || ''}`
@@ -142,7 +160,7 @@ async function renderTarhil() {
                 <strong>${N(s.total_amount)} ج</strong>
               </div>`;
             }).join('')}
-            <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:700;color:var(--blue)">
+            <div style="display:flex;justify-content:space-between;padding:8px 0;font-weight:700;color:var(--blue);border-top:2px solid #eee;margin-top:4px">
               <span>إجمالي ${group.customer?.name || 'العميل'}</span>
               <span>${N(group.total)} ج</span>
             </div>
@@ -151,7 +169,7 @@ async function renderTarhil() {
           <!-- زر تسجيل دفعة -->
           ${group.customerId ? `
           <div style="padding:0 14px 12px">
-            <button onclick="openAddPaymentModal('${group.customerId}','${group.customer?.name||''}')"
+            <button onclick="openAddPaymentModal('${group.customerId}','${group.customer?.name?.replace(/'/g, "\\'") || ''}')"
               style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;cursor:pointer;font-weight:700">
               💵 تسجيل دفعة من ${group.customer?.name || 'العميل'}
             </button>
@@ -168,6 +186,23 @@ async function renderTarhil() {
   }
 }
 
+// دالة لفتح/إغلاق تفاصيل العميل
+function toggleCustomerDetail(customerId) {
+  const el = document.getElementById(`cust-detail-${customerId}`);
+  if (el) {
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
 async function loadTarhilByDate() {
   renderTarhil();
+}
+
+// دالة للذهاب إلى تاريخ محدد
+async function goToTarhilDate(date) {
+  const picker = document.getElementById('tarhil-date-picker');
+  if (picker) picker.value = date;
+  store.set('currentDate', date);
+  updateDates();
+  await renderTarhil();
 }
