@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 // 🔐 INIT SUPABASE
 // ===============================
 
-const supabaseUrl = "https://YOUR_PROJECT_ID.supabase.co"
-const supabaseKey = "YOUR_ANON_KEY"
+const supabaseUrl = "https://qlixwdomshvocerxpamy.supabase.co"
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsaXh3ZG9tc2h2b2NlcnhwYW15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0Mzc3MTMsImV4cCI6MjA5MjAxMzcxM30.PFSAQ4J6WBLPHiTpgED7l4JiK4jmhL82MQFuJogwZhs"
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
 // ===============================
