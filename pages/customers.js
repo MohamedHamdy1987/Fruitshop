@@ -1,4 +1,5 @@
-import { supabase } from "../core/data.js"
+import { supabase, dbInsert, dbUpdate } from "../data.js";
+import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
 // 🎯 RENDER CUSTOMERS
@@ -13,7 +14,7 @@ export async function renderCustomersPage(app) {
   app.innerHTML = `
     <div class="header">
       <h2>👥 العملاء</h2>
-      <button onclick="openAddCustomer()">➕ إضافة عميل</button>
+      <button class="btn" onclick="openAddCustomer()">➕ إضافة عميل</button>
     </div>
 
     ${!customers?.length ? empty() : customers.map(renderCard).join("")}
@@ -28,7 +29,9 @@ function renderCard(c) {
   return `
     <div class="card">
       <h3>${c.name}</h3>
-      <button onclick="openCustomer('${c.id}', '${c.name}', ${c.opening_balance || 0})">
+      <p>📞 ${c.phone || "-"}</p>
+      <p>💰 رصيد مبدئي: ${c.opening_balance || 0}</p>
+      <button class="btn" onclick="openCustomer('${c.id}', '${c.name}', ${c.opening_balance || 0})">
         📂 عرض الحساب
       </button>
     </div>
@@ -39,20 +42,25 @@ function renderCard(c) {
 // ➕ ADD CUSTOMER
 // ===============================
 
-window.openAddCustomer = function () {
+window.openAddCustomer = async function () {
   const name = prompt("اسم العميل");
+  if (!name) return;
+
   const phone = prompt("الموبايل");
   const opening = Number(prompt("رصيد مبدئي") || 0);
 
-  if (!name) return;
-
-  dbInsert("customers", {
+  const ok = await dbInsert("customers", {
     name,
     phone,
     opening_balance: opening
   });
 
-  navigate("customers");
+  if (ok) {
+    toast("تم إضافة العميل");
+    navigate("customers");
+  } else {
+    toast("فشل الإضافة", "error");
+  }
 };
 
 // ===============================
@@ -79,27 +87,80 @@ window.openCustomer = async function (id, name, opening) {
   const net = total - totalCollected - totalAdj;
 
   app.innerHTML = `
-    <button onclick="navigate('customers')">⬅️ رجوع</button>
+    <button class="btn btn-outline" onclick="navigate('customers')">⬅️ رجوع</button>
 
     <h2>${name}</h2>
 
     <div class="card">
-
-      <p>💰 ${opening} رصيد مبدئي</p>
+      <p>💰 ${formatCurrency(opening)} رصيد مبدئي</p>
 
       ${renderDailyLines(daily)}
 
       <hr>
 
-      <p>📊 الإجمالي: ${total}</p>
-      <p>💸 خصم: ${totalCollected}</p>
-      <p>🧾 قطعية: ${totalAdj}</p>
+      <p>📊 الإجمالي: ${formatCurrency(total)}</p>
+      <p>💸 تحصيلات: ${formatCurrency(totalCollected)}</p>
+      <p>🧾 خصومات: ${formatCurrency(totalAdj)}</p>
 
       <hr>
 
-      <h3>🔵 ${net} الباقي</h3>
+      <h3>🔵 الباقي: ${formatCurrency(net)}</h3>
+
+      <div style="margin-top: 20px;">
+        <button class="btn" onclick="addCollection('${id}')">💰 تحصيل</button>
+        <button class="btn btn-outline" onclick="addAdjustment('${id}')">🧾 خصم / قطعية</button>
+      </div>
     </div>
   `;
+};
+
+// ===============================
+// 💰 ADD COLLECTION
+// ===============================
+
+window.addCollection = async function (customerId) {
+  const amount = Number(prompt("المبلغ المحصل"));
+  if (!amount || amount <= 0) return;
+
+  const ok = await dbInsert("collections", {
+    customer_id: customerId,
+    amount,
+    date: new Date().toISOString()
+  });
+
+  if (ok) {
+    toast("تم تسجيل التحصيل");
+    const { data: c } = await supabase.from("customers").select("*").eq("id", customerId).single();
+    openCustomer(customerId, c.name, c.opening_balance);
+  } else {
+    toast("فشل التسجيل", "error");
+  }
+};
+
+// ===============================
+// 🧾 ADD ADJUSTMENT
+// ===============================
+
+window.addAdjustment = async function (customerId) {
+  const amount = Number(prompt("قيمة الخصم"));
+  if (!amount) return;
+
+  const reason = prompt("السبب (اختياري)");
+
+  const ok = await dbInsert("adjustments", {
+    customer_id: customerId,
+    amount,
+    reason,
+    date: new Date().toISOString()
+  });
+
+  if (ok) {
+    toast("تم تسجيل الخصم");
+    const { data: c } = await supabase.from("customers").select("*").eq("id", customerId).single();
+    openCustomer(customerId, c.name, c.opening_balance);
+  } else {
+    toast("فشل التسجيل", "error");
+  }
 };
 
 // ===============================
@@ -160,8 +221,8 @@ function renderDailyLines(daily) {
   });
 
   return Object.keys(map).map(date => `
-    <p onclick="openTarhilDetails('${date}')">
-      📅 ${map[date]} يومية ${date}
+    <p onclick="openTarhilDetails('${date}')" style="cursor:pointer; color:#14b8a6;">
+      📅 ${date}: ${formatCurrency(map[date])}
     </p>
   `).join("");
 }
@@ -179,15 +240,15 @@ window.openTarhilDetails = async function (date) {
     .eq("date", date);
 
   app.innerHTML = `
-    <button onclick="navigate('customers')">⬅️ رجوع</button>
+    <button class="btn btn-outline" onclick="navigate('customers')">⬅️ رجوع</button>
 
     <h2>📋 تفاصيل يوم ${date}</h2>
 
-    ${data.map(i => `
+    ${data?.length ? data.map(i => `
       <div class="card">
-        ${i.product_name} - ${i.qty} × ${i.price} = ${i.total}
+        <strong>${i.customer_name}</strong> - ${i.product_name} - ${i.qty} × ${i.price} = ${formatCurrency(i.total)}
       </div>
-    `).join("")}
+    `).join("") : "<p>لا توجد مبيعات</p>"}
   `;
 };
 
