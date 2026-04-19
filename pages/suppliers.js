@@ -89,5 +89,3 @@ window.submitSupplier = async () => {
     toast("فشل الإضافة: " + error.message, "error");
   }
 };
-
-// باقي الدوال مثل openSupplier تظل كما هي مع تحسينات الألوان
