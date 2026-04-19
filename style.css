@@ -1,4 +1,4 @@
-/* ===== ألوان الهوية الجديدة ===== */
+/* ===== ألوان الهوية ===== */
 :root {
   --primary-cream: #FDF8F2;
   --secondary-gold: #C9A96E;
@@ -27,7 +27,6 @@ body {
   overflow: hidden;
 }
 
-/* ===== خلفية متحركة (بسيطة) ===== */
 .bg {
   position: fixed;
   top: 0;
@@ -310,7 +309,6 @@ body {
   }
 }
 
-/* تحسينات عامة */
 h1, h2, h3, h4 {
   color: var(--text-dark);
   font-weight: 700;
