@@ -40,38 +40,94 @@ function renderCard(inv) {
 }
 
 // ===============================
-// ➕ CREATE INVOICE (مع إنشاء مورد تلقائي)
+// ➕ CREATE INVOICE (قائمة منسدلة + إضافة جديد)
 // ===============================
 
 window.openCreateInvoice = async function () {
-  const name = prompt("اسم المورد");
-  if (!name) return;
+  const app = document.getElementById("app");
 
-  // 1. البحث عن المورد
-  let { data: supplier } = await supabase
+  // جلب جميع الموردين
+  const { data: suppliers } = await supabase
     .from("suppliers")
     .select("*")
-    .eq("name", name)
-    .maybeSingle();
+    .order("name");
 
-  // 2. إذا لم يوجد، ننشئه تلقائياً
-  if (!supplier) {
-    const phone = prompt("رقم هاتف المورد (اختياري)");
-    const { data: newSupplier, error: insertError } = await supabase
+  const options = suppliers?.map(s => `<option value="${s.id}">${s.name}</option>`).join("") || "";
+
+  app.innerHTML = `
+    <button class="btn btn-outline" onclick="navigate('invoices')">⬅️ رجوع</button>
+    <h2>➕ فاتورة جديدة</h2>
+    
+    <div class="card">
+      <label>اختر المورد</label>
+      <select id="supplier-select" style="width:100%; padding:12px; border-radius:8px; margin:10px 0; font-family:Cairo;">
+        <option value="">-- اختر مورد --</option>
+        ${options}
+        <option value="new">➕ إضافة مورد جديد</option>
+      </select>
+
+      <div id="new-supplier-fields" style="display:none;">
+        <input id="new-supplier-name" placeholder="اسم المورد الجديد" style="width:100%; padding:12px; border-radius:8px; margin:5px 0;">
+        <input id="new-supplier-phone" placeholder="رقم الهاتف (اختياري)" style="width:100%; padding:12px; border-radius:8px; margin:5px 0;">
+      </div>
+
+      <button class="btn btn-primary" onclick="submitNewInvoice()" style="margin-top:15px;">إنشاء الفاتورة</button>
+    </div>
+  `;
+
+  // إظهار/إخفاء حقول المورد الجديد
+  const select = document.getElementById("supplier-select");
+  select.addEventListener("change", (e) => {
+    const newFields = document.getElementById("new-supplier-fields");
+    if (e.target.value === "new") {
+      newFields.style.display = "block";
+    } else {
+      newFields.style.display = "none";
+    }
+  });
+};
+
+window.submitNewInvoice = async function () {
+  const select = document.getElementById("supplier-select");
+  let supplierId = select.value;
+
+  // إذا اختار "مورد جديد"
+  if (supplierId === "new") {
+    const name = document.getElementById("new-supplier-name").value.trim();
+    if (!name) {
+      toast("الرجاء إدخال اسم المورد", "error");
+      return;
+    }
+    const phone = document.getElementById("new-supplier-phone").value.trim();
+
+    // إنشاء المورد الجديد
+    const { data: newSupplier, error } = await supabase
       .from("suppliers")
       .insert({ name, phone })
       .select()
       .single();
 
-    if (insertError) {
-      toast("فشل إنشاء المورد: " + insertError.message, "error");
+    if (error) {
+      toast("فشل إنشاء المورد: " + error.message, "error");
       return;
     }
-    supplier = newSupplier;
-    toast("تم إضافة المورد تلقائياً", "success");
+    supplierId = newSupplier.id;
+    toast("تم إضافة المورد بنجاح", "success");
   }
 
-  // 3. إنشاء الفاتورة
+  if (!supplierId) {
+    toast("الرجاء اختيار مورد", "error");
+    return;
+  }
+
+  // جلب بيانات المورد
+  const { data: supplier } = await supabase
+    .from("suppliers")
+    .select("*")
+    .eq("id", supplierId)
+    .single();
+
+  // إنشاء الفاتورة
   const ok = await dbInsert("invoices", {
     supplier_id: supplier.id,
     supplier_name: supplier.name,
