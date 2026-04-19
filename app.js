@@ -1,6 +1,5 @@
 window.onload = function () {
 
-  alert("DOM LOADED");
 
   const app = document.getElementById("app");
 
