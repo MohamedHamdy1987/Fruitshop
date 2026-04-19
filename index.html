@@ -1,331 +1,428 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>نظام إدارة سوق الخضار</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>برنامج إدارة الخضار والفواكه</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#14b8a6;
+  --primary-dark:#0f766e;
+  --dark:#0f172a;
+  --bg:#f0fdf9;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo',sans-serif;background:var(--bg);color:var(--dark);}
 
-  <style>
-    body {
-      margin: 0;
-      font-family: 'Cairo', sans-serif;
-      background: #f8fafc;
-      color: #111;
-    }
+/* NAV */
+nav{
+  position:sticky;top:0;z-index:100;
+  background:white;padding:14px 24px;
+  display:flex;justify-content:space-between;align-items:center;
+  box-shadow:0 1px 8px rgba(0,0,0,0.07);
+}
+.nav-logo{font-size:18px;font-weight:900;color:var(--primary-dark);}
+.nav-cta{
+  padding:10px 20px;background:var(--primary);color:white;
+  border:none;border-radius:8px;cursor:pointer;font-family:'Cairo',sans-serif;
+  font-weight:700;font-size:14px;margin-left:8px;
+}
+.nav-login{
+  padding:10px 20px;background:transparent;color:var(--primary-dark);
+  border:1px solid var(--primary);border-radius:8px;cursor:pointer;
+  font-family:'Cairo',sans-serif;font-weight:700;font-size:14px;
+}
 
-    .container {
-      max-width: 1100px;
-      margin: auto;
-      padding: 20px;
-    }
+/* HERO */
+.hero{
+  background:linear-gradient(135deg,var(--primary-dark) 0%,var(--primary) 100%);
+  color:white;text-align:center;padding:80px 20px 90px;position:relative;overflow:hidden;
+}
+.hero::after{
+  content:"";position:absolute;bottom:-1px;left:0;right:0;height:60px;
+  background:var(--bg);clip-path:ellipse(55% 100% at 50% 100%);
+}
+.hero h1{font-size:clamp(24px,5vw,40px);font-weight:900;margin-bottom:14px;line-height:1.3;}
+.hero p{font-size:clamp(14px,2.5vw,18px);opacity:0.92;max-width:560px;margin:0 auto 28px;}
+.hero-btns{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;}
+.btn-white{
+  padding:14px 28px;background:white;color:var(--primary-dark);
+  border:none;border-radius:10px;font-family:'Cairo',sans-serif;
+  font-weight:800;font-size:15px;cursor:pointer;
+  box-shadow:0 4px 20px rgba(0,0,0,0.15);
+}
+.btn-outline{
+  padding:14px 28px;background:transparent;color:white;
+  border:2px solid rgba(255,255,255,0.6);border-radius:10px;
+  font-family:'Cairo',sans-serif;font-weight:700;font-size:15px;cursor:pointer;
+}
 
-    .hero {
-      text-align: center;
-      padding: 60px 20px 40px;
-    }
+/* SECTION */
+.section{padding:60px 20px;text-align:center;}
+.section-title{font-size:clamp(20px,4vw,28px);font-weight:900;margin-bottom:8px;color:var(--dark);}
+.section-sub{font-size:15px;color:#64748b;max-width:500px;margin:0 auto 36px;}
+.container{max-width:1000px;margin:0 auto;}
 
-    .hero h1 {
-      font-size: 42px;
-      margin-bottom: 20px;
-      color: #0f766e;
-    }
+/* FEATURES */
+.features-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:16px;
+}
+.feature-card{
+  background:white;padding:24px 18px;border-radius:14px;
+  box-shadow:0 2px 12px rgba(0,0,0,0.07);border:1px solid #e2e8f0;
+  transition:transform 0.2s;
+}
+.feature-card:hover{transform:translateY(-4px);}
+.feature-icon{font-size:32px;margin-bottom:10px;}
+.feature-card h3{font-size:15px;font-weight:700;margin-bottom:6px;}
+.feature-card p{font-size:13px;color:#64748b;line-height:1.5;}
 
-    .hero p {
-      font-size: 18px;
-      color: #555;
-    }
+/* PROBLEM */
+.problem-section{background:white;padding:60px 20px;}
+.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:700px;margin:0 auto 32px;}
+.problem-item{
+  background:#fef2f2;padding:16px;border-radius:10px;
+  border-right:4px solid #ef4444;text-align:right;font-size:14px;font-weight:600;color:#991b1b;
+}
+.solution-item{
+  background:#f0fdf4;padding:16px;border-radius:10px;
+  border-right:4px solid #22c55e;text-align:right;font-size:14px;font-weight:600;color:#166534;
+}
 
-    .auth-box {
-      background: white;
-      max-width: 400px;
-      margin: 20px auto;
-      padding: 30px;
-      border-radius: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    }
+/* TESTIMONIALS */
+.testimonials{display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 auto;}
+.testimonial{
+  background:white;padding:20px;border-radius:12px;
+  box-shadow:0 2px 10px rgba(0,0,0,0.07);text-align:right;
+  border-right:4px solid var(--primary);font-size:14px;line-height:1.7;
+}
+.testimonial b{display:block;margin-top:8px;color:var(--primary-dark);font-size:13px;}
 
-    .auth-box h2 {
-      margin-top: 0;
-      text-align: center;
-      color: #0f766e;
-    }
+/* PRICING */
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;max-width:600px;margin:0 auto;}
+.price-card{
+  background:white;padding:28px 24px;border-radius:14px;
+  box-shadow:0 2px 12px rgba(0,0,0,0.08);border:2px solid #e2e8f0;
+}
+.price-card.featured{border-color:var(--primary);position:relative;}
+.price-card.featured::before{
+  content:"⭐ الأوفر";position:absolute;top:-12px;right:50%;transform:translateX(50%);
+  background:var(--primary);color:white;padding:4px 14px;border-radius:20px;
+  font-size:12px;font-weight:700;white-space:nowrap;
+}
+.price-card h3{font-size:16px;font-weight:700;margin-bottom:12px;}
+.price-amount{font-size:36px;font-weight:900;color:var(--primary-dark);margin-bottom:4px;}
+.price-amount span{font-size:14px;color:#64748b;font-weight:400;}
+.price-note{font-size:13px;color:#64748b;margin-bottom:20px;}
+.price-btn{
+  width:100%;padding:13px;background:var(--primary);color:white;
+  border:none;border-radius:10px;cursor:pointer;font-family:'Cairo',sans-serif;
+  font-weight:700;font-size:15px;
+}
 
-    .form-group {
-      margin-bottom: 16px;
-    }
+/* CTA */
+.cta-section{
+  background:linear-gradient(135deg,var(--primary-dark),var(--primary));
+  color:white;padding:60px 20px;text-align:center;
+}
+.cta-section h2{font-size:clamp(20px,4vw,28px);font-weight:900;margin-bottom:14px;}
+.cta-section p{opacity:0.9;margin-bottom:24px;font-size:15px;}
 
-    .form-group input {
-      width: 100%;
-      padding: 12px 16px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      font-size: 16px;
-      box-sizing: border-box;
-    }
+/* FOOTER */
+footer{
+  background:var(--dark);color:rgba(255,255,255,0.7);
+  text-align:center;padding:20px;font-size:13px;
+}
 
-    .btn {
-      width: 100%;
-      padding: 14px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: 0.3s;
-    }
+/* WHATSAPP */
+.whatsapp-btn{
+  position:fixed;bottom:24px;left:24px;
+  background:#25D366;color:white;width:54px;height:54px;
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:24px;text-decoration:none;box-shadow:0 4px 16px rgba(0,0,0,0.2);
+  z-index:999;transition:transform 0.2s;
+}
+.whatsapp-btn:hover{transform:scale(1.08);}
 
-    .btn-primary {
-      background: #14b8a6;
-      color: white;
-    }
+/* MODAL */
+.modal-overlay{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;
+  z-index:1000;padding:16px;
+}
+.modal-card{
+  background:white;border-radius:20px;padding:28px 24px;
+  max-width:400px;width:100%;box-shadow:0 20px 30px rgba(0,0,0,0.2);
+  text-align:center;
+}
+.modal-card h2{color:var(--primary-dark);margin-bottom:20px;font-size:22px;}
+.modal-card input{
+  width:100%;padding:14px 16px;margin-bottom:16px;
+  border:1px solid #ddd;border-radius:10px;font-family:'Cairo',sans-serif;
+  font-size:14px;
+}
+.modal-card .btn-primary{
+  width:100%;padding:14px;background:var(--primary);color:white;
+  border:none;border-radius:10px;font-weight:700;font-size:16px;
+  cursor:pointer;margin-top:8px;
+}
+.modal-card .btn-secondary{
+  width:100%;padding:12px;background:transparent;color:var(--primary-dark);
+  border:1px solid var(--primary);border-radius:10px;font-weight:700;
+  font-size:14px;cursor:pointer;margin-top:12px;
+}
+.modal-message{font-size:13px;margin-top:12px;min-height:20px;}
+.error-msg{color:#dc2626;}.success-msg{color:#16a34a;}
+.modal-close{position:absolute;top:16px;left:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#666;}
+.modal-card{position:relative;}
 
-    .btn-primary:hover {
-      background: #0f766e;
-    }
-
-    .btn-secondary {
-      background: #e2e8f0;
-      color: #333;
-      margin-top: 10px;
-    }
-
-    .toggle-link {
-      text-align: center;
-      margin-top: 15px;
-      color: #14b8a6;
-      cursor: pointer;
-    }
-
-    .features {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
-      margin-top: 60px;
-    }
-
-    .card {
-      background: white;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-    }
-
-    .footer {
-      text-align: center;
-      padding: 40px;
-      color: #777;
-    }
-
-    .error-msg {
-      color: #ef4444;
-      font-size: 14px;
-      margin-top: 5px;
-      display: none;
-    }
-
-    .success-msg {
-      color: #22c55e;
-      font-size: 14px;
-      margin-top: 5px;
-      display: none;
-    }
-  </style>
+@media(max-width:600px){
+  .problem-grid{grid-template-columns:1fr;}
+}
+</style>
 </head>
-
 <body>
 
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">🍊 النظام</div>
+  <div>
+    <button class="nav-login" onclick="openModal('login')">تسجيل الدخول</button>
+    <button class="nav-cta" onclick="openModal('signup')">جرب مجاناً</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <h1>نظام إدارة الخضار والفواكه<br>بدل الدفتر والكلام</h1>
+  <p>تابع حساباتك بدقة، عرف فلوسك كل يوم، وفر وقتك وجهدك بنظام متكامل</p>
+  <div class="hero-btns">
+    <button class="btn-white" onclick="openModal('signup')">🚀 ابدأ التجربة المجانية</button>
+    <button class="btn-outline" onclick="contact()">💬 تواصل معنا</button>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<div class="section container">
+  <p class="section-title">🚀 كل اللي محتاجه في مكان واحد</p>
+  <p class="section-sub">نظام متكامل صُمم خصيصاً لتجار الخضار والفواكه بالجملة</p>
+  <div class="features-grid">
+    <div class="feature-card"><div class="feature-icon">🛒</div><h3>تسجيل المبيعات</h3><p>سجل كاش وآجل مع ربط العملاء تلقائياً</p></div>
+    <div class="feature-card"><div class="feature-icon">👥</div><h3>حسابات العملاء</h3><p>كشف حساب لكل عميل مع إرسال واتساب</p></div>
+    <div class="feature-card"><div class="feature-icon">🚚</div><h3>حسابات الموردين</h3><p>فواتير أوتوماتيك مع خصم العمولة والنولون</p></div>
+    <div class="feature-card"><div class="feature-icon">🧾</div><h3>فواتير أوتوماتيك</h3><p>فاتورة تنشأ تلقائياً لما الصنف ينتهي بالكامل</p></div>
+    <div class="feature-card"><div class="feature-icon">💰</div><h3>الخزنة</h3><p>تابع الكاش والمصروفات والصافي لحظة بلحظة</p></div>
+    <div class="feature-card"><div class="feature-icon">📆</div><h3>إغلاق اليوم</h3><p>رحّل المتبقي وابدأ يوم جديد بضغطة واحدة</p></div>
+    <div class="feature-card"><div class="feature-icon">👷</div><h3>الموظفين</h3><p>مرتبات وغياب وسلف بشكل منظم</p></div>
+    <div class="feature-card"><div class="feature-icon">🤝</div><h3>الشركاء</h3><p>يومية وأرباح ودفعات لكل شريك</p></div>
+    <div class="feature-card"><div class="feature-icon">☁️</div><h3>سحابي 100%</h3><p>بياناتك متزامنة من أي جهاز في أي وقت</p></div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<div class="problem-section">
   <div class="container">
-
-    <!-- HERO -->
-    <div class="hero">
-      <h1>🍎 نظام إدارة سوق الخضار والفواكه</h1>
-      <p>
-        إدارة الفواتير، المبيعات، الموردين، العملاء، الترحيلات والخزنة<br>
-        في نظام واحد سهل وسريع
-      </p>
-    </div>
-
-    <!-- AUTH BOX -->
-    <div class="auth-box">
-      <h2 id="auth-title">تسجيل الدخول</h2>
-
-      <form id="auth-form" onsubmit="return false;">
-        <div class="form-group" id="name-group" style="display: none;">
-          <input type="text" id="full-name" placeholder="الاسم الكامل" autocomplete="name">
-        </div>
-        <div class="form-group">
-          <input type="email" id="email" placeholder="البريد الإلكتروني" required autocomplete="email">
-        </div>
-        <div class="form-group">
-          <input type="password" id="password" placeholder="كلمة المرور" required autocomplete="current-password">
-        </div>
-
-        <div class="error-msg" id="error-msg"></div>
-        <div class="success-msg" id="success-msg"></div>
-
-        <button type="submit" class="btn btn-primary" id="submit-btn">
-          🚀 دخول
-        </button>
-      </form>
-
-      <button class="btn btn-secondary" id="toggle-mode">
-        ⭐ إنشاء حساب جديد
-      </button>
-
-      <div class="toggle-link" id="forgot-password">
-        نسيت كلمة المرور؟
-      </div>
-    </div>
-
-    <!-- FEATURES -->
-    <div class="features">
-      <div class="card">
-        <h3>📄 إدارة الفواتير</h3>
-        <p>إنشاء فواتير الموردين وإدارة الأصناف بسهولة</p>
-      </div>
-      <div class="card">
-        <h3>🛒 المبيعات</h3>
-        <p>بيع مباشر من الفواتير مع متابعة الباقي</p>
-      </div>
-      <div class="card">
-        <h3>👥 العملاء</h3>
-        <p>كشف حساب لحظي ويومية تلقائية</p>
-      </div>
-      <div class="card">
-        <h3>💰 الخزنة</h3>
-        <p>تحصيلات ومصروفات كاملة</p>
-      </div>
-      <div class="card">
-        <h3>🏬 محلات السوق</h3>
-        <p>حسابات بينك وبين التجار الآخرين</p>
-      </div>
-      <div class="card">
-        <h3>📊 تقارير</h3>
-        <p>لوحة تحكم تعرض كل الأرقام المهمة</p>
-      </div>
-    </div>
-
-    <!-- FOOTER -->
-    <div class="footer">
-      © 2026 جميع الحقوق محفوظة
+    <p class="section-title" style="margin-bottom:8px">❌ بتواجه المشاكل دي؟</p>
+    <p class="section-sub">الدفتر والأوراق بيضيعوا الفلوس والوقت</p>
+    <div class="problem-grid">
+      <div class="problem-item">ضياع الفلوس من الحسابات الغلط</div>
+      <div class="solution-item">حسابات دقيقة تلقائية بدون غلط</div>
+      <div class="problem-item">تعب من الدفتر والورقة والقلم</div>
+      <div class="solution-item">كل حاجة في موبايلك أو كمبيوترك</div>
+      <div class="problem-item">ما تعرفش مين عليه ومين ليه فلوس</div>
+      <div class="solution-item">كشف حساب فوري لكل عميل ومورد</div>
+      <div class="problem-item">ما تعرفش صافي يومك قد إيه</div>
+      <div class="solution-item">ملخص يومي فوري بكل التفاصيل</div>
     </div>
   </div>
+</div>
 
-  <script type="module">
-    import { capitalizeFirstLetter } from './utils.js';
-    import { signUp, signIn, resetPassword } from './auth.js';
+<!-- TESTIMONIALS -->
+<div class="section container">
+  <p class="section-title">💬 آراء العملاء</p>
+  <p class="section-sub">ناس زيك بيستخدموا النظام وشايفين الفرق</p>
+  <div class="testimonials">
+    <div class="testimonial">
+      "بقيت عارف حسابي كل يوم بسهولة، الدنيا اتنظمت وما بقيتش خايف أضيع فلوس"
+      <b>— تاجر فواكه بالجملة</b>
+    </div>
+    <div class="testimonial">
+      "الفواتير بتتعمل لوحدها لما الصنف يخلص، وبعت الكشف للمورد على واتساب في ثانية"
+      <b>— محل خضار بالجملة</b>
+    </div>
+    <div class="testimonial">
+      "أحسن استثمار عملته، وفر عليّا ساعات كل يوم وبقيت عارف صافيّ بالدقة"
+      <b>— تاجر بالسوق</b>
+    </div>
+  </div>
+</div>
 
-    // DOM Elements
-    const authTitle = document.getElementById('auth-title');
-    const nameGroup = document.getElementById('name-group');
-    const submitBtn = document.getElementById('submit-btn');
-    const toggleBtn = document.getElementById('toggle-mode');
-    const forgotLink = document.getElementById('forgot-password');
-    const errorMsg = document.getElementById('error-msg');
-    const successMsg = document.getElementById('success-msg');
-    const emailInput = document.getElementById('email');
-    const passwordInput = document.getElementById('password');
-    const fullNameInput = document.getElementById('full-name');
+<!-- PRICING -->
+<div class="section" style="background:white;">
+  <div class="container">
+    <p class="section-title">💰 الأسعار</p>
+    <p class="section-sub">اشتراك بسيط يوفر عليك أضعافه</p>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h3>الخطة الشهرية</h3>
+        <div class="price-amount">750 <span>جنيه/شهر</span></div>
+        <p class="price-note">شهر تجربة مجاني</p>
+        <button class="price-btn" onclick="contact()">ابدأ الاشتراك</button>
+      </div>
+      <div class="price-card featured">
+        <h3>الخطة السنوية</h3>
+        <div class="price-amount">6000 <span>جنيه/سنة</span></div>
+        <p class="price-note">توفير 3000 جنيه</p>
+        <button class="price-btn" onclick="contact()">ابدأ الاشتراك</button>
+      </div>
+    </div>
+  </div>
+</div>
 
-    let mode = 'signin'; // 'signin' or 'signup'
+<!-- CTA -->
+<div class="cta-section">
+  <h2>🔥 ابدأ دلوقتي</h2>
+  <p>شهر تجربة مجاني، لا تضيع وقتك أكتر</p>
+  <button class="btn-white" onclick="openModal('signup')">جرب البرنامج مجاناً</button>
+</div>
 
-    // Toggle between Sign In and Sign Up
-    toggleBtn.addEventListener('click', () => {
-      if (mode === 'signin') {
-        mode = 'signup';
-        authTitle.textContent = 'إنشاء حساب جديد';
-        nameGroup.style.display = 'block';
-        submitBtn.textContent = '✨ إنشاء حساب';
-        toggleBtn.textContent = '🔐 لدي حساب بالفعل';
-        forgotLink.style.display = 'none';
-        fullNameInput.required = true;
-      } else {
-        mode = 'signin';
-        authTitle.textContent = 'تسجيل الدخول';
-        nameGroup.style.display = 'none';
-        submitBtn.textContent = '🚀 دخول';
-        toggleBtn.textContent = '⭐ إنشاء حساب جديد';
-        forgotLink.style.display = 'block';
-        fullNameInput.required = false;
-      }
-      clearMessages();
-    });
+<!-- FOOTER -->
+<footer>
+  <p>© 2025 نظام إدارة الخضار والفواكه · جميع الحقوق محفوظة</p>
+</footer>
 
-    // Forgot Password
-    forgotLink.addEventListener('click', async () => {
-      const email = emailInput.value.trim();
-      if (!email) {
-        showError('يرجى إدخال البريد الإلكتروني أولاً');
+<!-- WHATSAPP -->
+<a class="whatsapp-btn" href="https://wa.me/201XXXXXXXXX" target="_blank" title="تواصل معنا">💬</a>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <h2 id="modalTitle">تسجيل الدخول</h2>
+    <form onsubmit="return false;">
+      <div id="nameField" style="display:none;">
+        <input type="text" id="fullName" placeholder="الاسم الكامل" autocomplete="name">
+      </div>
+      <input type="email" id="email" placeholder="البريد الإلكتروني" autocomplete="email" required>
+      <input type="password" id="password" placeholder="كلمة المرور" autocomplete="current-password" required>
+      <div class="modal-message" id="modalMessage"></div>
+      <button type="submit" class="btn-primary" id="submitBtn">دخول</button>
+    </form>
+    <button class="btn-secondary" id="toggleModeBtn">إنشاء حساب جديد</button>
+  </div>
+</div>
+
+<script type="module">
+  import { signUp, signIn } from './auth.js';
+
+  const WHATSAPP = "https://wa.me/201XXXXXXXXX"; // ← ضع رقمك هنا
+  window.contact = () => window.open(WHATSAPP, "_blank");
+
+  const modal = document.getElementById('authModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const nameField = document.getElementById('nameField');
+  const submitBtn = document.getElementById('submitBtn');
+  const toggleBtn = document.getElementById('toggleModeBtn');
+  const msgDiv = document.getElementById('modalMessage');
+  const emailInp = document.getElementById('email');
+  const passInp = document.getElementById('password');
+  const fullNameInp = document.getElementById('fullName');
+
+  let currentMode = 'login'; // 'login' or 'signup'
+
+  window.openModal = (mode) => {
+    currentMode = mode;
+    if (mode === 'signup') {
+      modalTitle.textContent = 'إنشاء حساب جديد';
+      nameField.style.display = 'block';
+      submitBtn.textContent = 'إنشاء حساب';
+      toggleBtn.textContent = 'لدي حساب بالفعل';
+      fullNameInp.required = true;
+    } else {
+      modalTitle.textContent = 'تسجيل الدخول';
+      nameField.style.display = 'none';
+      submitBtn.textContent = 'دخول';
+      toggleBtn.textContent = 'إنشاء حساب جديد';
+      fullNameInp.required = false;
+    }
+    clearMessage();
+    modal.style.display = 'flex';
+  };
+
+  window.closeModal = () => {
+    modal.style.display = 'none';
+    clearMessage();
+    emailInp.value = '';
+    passInp.value = '';
+    if (fullNameInp) fullNameInp.value = '';
+  };
+
+  toggleBtn.addEventListener('click', () => {
+    if (currentMode === 'login') {
+      openModal('signup');
+    } else {
+      openModal('login');
+    }
+  });
+
+  function showError(msg) {
+    msgDiv.textContent = msg;
+    msgDiv.className = 'modal-message error-msg';
+  }
+  function showSuccess(msg) {
+    msgDiv.textContent = msg;
+    msgDiv.className = 'modal-message success-msg';
+  }
+  function clearMessage() {
+    msgDiv.textContent = '';
+  }
+
+  document.querySelector('#authModal form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearMessage();
+
+    const email = emailInp.value.trim();
+    const password = passInp.value.trim();
+
+    if (!email || !password) {
+      showError('البريد وكلمة المرور مطلوبان');
+      return;
+    }
+
+    if (currentMode === 'signup') {
+      const fullName = fullNameInp.value.trim();
+      if (!fullName) {
+        showError('الاسم الكامل مطلوب');
         return;
       }
 
-      const result = await resetPassword(email);
+      const result = await signUp(email, password, fullName);
       if (result.success) {
-        showSuccess('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني');
-      } else {
-        showError(result.error || 'حدث خطأ');
-      }
-    });
-
-    // Handle Form Submit
-    document.getElementById('auth-form').addEventListener('submit', async () => {
-      clearMessages();
-
-      const email = emailInput.value.trim();
-      const password = passwordInput.value.trim();
-
-      if (!email || !password) {
-        showError('جميع الحقول مطلوبة');
-        return;
-      }
-
-      if (mode === 'signup') {
-        const fullName = fullNameInput.value.trim();
-        if (!fullName) {
-          showError('الاسم الكامل مطلوب');
-          return;
-        }
-
-        const result = await signUp(email, password, fullName);
-        if (result.success) {
-          showSuccess('تم إنشاء الحساب بنجاح! تفقد بريدك الإلكتروني لتأكيد الحساب.');
-          // Auto switch to sign in after 3 seconds
-          setTimeout(() => {
-            mode = 'signin';
-            toggleBtn.click();
-          }, 3000);
-        } else {
-          showError(result.error || 'فشل إنشاء الحساب');
-        }
-      } else {
-        const result = await signIn(email, password);
-        if (result.success) {
+        showSuccess('تم إنشاء الحساب، جاري تحويلك...');
+        setTimeout(() => {
           window.location.href = 'app.html';
-        } else {
-          showError(result.error || 'بيانات الدخول غير صحيحة');
-        }
+        }, 1500);
+      } else {
+        showError(result.error || 'فشل إنشاء الحساب');
       }
-    });
-
-    function showError(msg) {
-      errorMsg.textContent = msg;
-      errorMsg.style.display = 'block';
-      successMsg.style.display = 'none';
+    } else {
+      // login
+      const result = await signIn(email, password);
+      if (result.success) {
+        window.location.href = 'app.html';
+      } else {
+        showError(result.error || 'بيانات الدخول غير صحيحة');
+      }
     }
+  });
 
-    function showSuccess(msg) {
-      successMsg.textContent = msg;
-      successMsg.style.display = 'block';
-      errorMsg.style.display = 'none';
-    }
-
-    function clearMessages() {
-      errorMsg.style.display = 'none';
-      successMsg.style.display = 'none';
-    }
-  </script>
-
+  // إغلاق المودال عند النقر خارج البطاقة
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+</script>
 </body>
-
 </html>
