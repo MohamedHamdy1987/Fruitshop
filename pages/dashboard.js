@@ -10,7 +10,6 @@ export async function renderDashboard(app) {
   const weekdays = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
   const weekday = weekdays[today.getDay()];
 
-  // الحصول على اسم المحل من البروفايل
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name")
@@ -20,7 +19,6 @@ export async function renderDashboard(app) {
 
   app.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 24px;">
-      <!-- بطاقة الترحيب والتاريخ -->
       <div class="card" style="padding: 32px 28px; background: linear-gradient(135deg, #FDF8F2 0%, #F5EDE3 100%);">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div>
@@ -40,7 +38,6 @@ export async function renderDashboard(app) {
         </div>
       </div>
 
-      <!-- ملخص سريع -->
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 20px;">
         ${await summaryCard("المبيعات اليوم", await getTodaySales())}
         ${await summaryCard("العملاء", await getCustomersCount())}
