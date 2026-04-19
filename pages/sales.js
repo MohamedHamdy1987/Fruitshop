@@ -1,4 +1,5 @@
-import { supabase, dbUpdate } from "..core/data.js";
+import { supabase, dbUpdate } from "../data.js";
+import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
 // 🎯 RENDER SALES PAGE
@@ -16,7 +17,7 @@ export async function renderSalesPage(app) {
       <h2>🛒 المبيعات</h2>
     </div>
 
-    ${!invoices?.length ? empty("لا توجد فواتير") : invoices.map(renderCard).join("")}
+    ${!invoices?.length ? empty("لا توجد فواتير مفتوحة") : invoices.map(renderCard).join("")}
   `;
 }
 
@@ -29,7 +30,7 @@ function renderCard(inv) {
     <div class="card">
       <h3>${inv.supplier_name}</h3>
       <p>📅 ${inv.date}</p>
-      <button onclick="openSalesInvoice('${inv.id}')">🛒 بيع</button>
+      <button class="btn" onclick="openSalesInvoice('${inv.id}')">🛒 بيع</button>
     </div>
   `;
 }
@@ -53,7 +54,7 @@ window.openSalesInvoice = async function (id) {
     .eq("invoice_id", id);
 
   app.innerHTML = `
-    <button onclick="navigate('sales')">⬅️ رجوع</button>
+    <button class="btn btn-outline" onclick="navigate('sales')">⬅️ رجوع</button>
 
     <h2>🛒 بيع من فاتورة: ${invoice.supplier_name}</h2>
 
@@ -79,14 +80,14 @@ function renderProducts(products, invoiceId) {
       </thead>
       <tbody>
         ${products.map(p => {
-          const remaining = p.qty - p.sold - p.returned;
+          const remaining = p.qty - (p.sold || 0) - (p.returned || 0);
 
           return `
             <tr>
               <td>${p.name}</td>
               <td>${remaining}</td>
               <td>
-                <button onclick="sellProduct('${p.id}', '${invoiceId}', ${remaining})">
+                <button class="btn" onclick="sellProduct('${p.id}', '${invoiceId}', ${remaining})">
                   بيع
                 </button>
               </td>
@@ -104,15 +105,20 @@ function renderProducts(products, invoiceId) {
 
 window.sellProduct = async function (productId, invoiceId, maxQty) {
   const qty = Number(prompt("الكمية"));
-  const price = Number(prompt("السعر"));
-
   if (!qty || qty <= 0) return;
   if (qty > maxQty) {
-    alert("الكمية أكبر من المتاح");
+    toast("الكمية أكبر من المتاح", "error");
     return;
   }
 
+  const price = Number(prompt("السعر"));
+  if (!price) return;
+
   const type = prompt("نوع البيع: cash / credit / shop");
+  if (!["cash", "credit", "shop"].includes(type)) {
+    toast("نوع بيع غير صحيح", "error");
+    return;
+  }
 
   let customerId = null;
   let customerName = null;
@@ -132,7 +138,7 @@ window.sellProduct = async function (productId, invoiceId, maxQty) {
       .single();
 
     if (!customer) {
-      alert("العميل غير موجود");
+      toast("العميل غير موجود", "error");
       return;
     }
 
@@ -152,14 +158,14 @@ window.sellProduct = async function (productId, invoiceId, maxQty) {
       .single();
 
     if (!shop) {
-      alert("المحل غير موجود");
+      toast("المحل غير موجود", "error");
       return;
     }
 
     shopId = shop.id;
   }
 
-  processSale(productId, invoiceId, qty, price, type, customerId, customerName, shopId);
+  await processSale(productId, invoiceId, qty, price, type, customerId, customerName, shopId);
 };
 
 // ===============================
@@ -168,6 +174,14 @@ window.sellProduct = async function (productId, invoiceId, maxQty) {
 
 async function processSale(productId, invoiceId, qty, price, type, customerId, customerName, shopId) {
   const total = qty * price;
+  const today = new Date().toISOString().split("T")[0];
+
+  // الحصول على المنتج لمعرفة اسمه
+  const { data: product } = await supabase
+    .from("invoice_products")
+    .select("*")
+    .eq("id", productId)
+    .single();
 
   // 1. تسجيل البيع
   await supabase.from("sales").insert({
@@ -178,25 +192,21 @@ async function processSale(productId, invoiceId, qty, price, type, customerId, c
     total,
     type,
     customer_id: customerId,
-    shop_id: shopId
+    shop_id: shopId,
+    created_at: new Date().toISOString()
   });
 
-  // 2. تحديث المنتج
-  const { data: product } = await supabase
-    .from("invoice_products")
-    .select("*")
-    .eq("id", productId)
-    .single();
+  // 2. تحديث المنتج (المباع والإجمالي)
+  const newSold = (product.sold || 0) + qty;
+  const newSalesTotal = (product.sales_total || 0) + total;
 
   await dbUpdate("invoice_products", productId, {
-    sold: product.sold + qty,
-    sales_total: (product.sales_total || 0) + total
+    sold: newSold,
+    sales_total: newSalesTotal
   });
 
-  const today = new Date().toISOString().split("T")[0];
-
   // ===============================
-  // 👤 ترحيل للعميل
+  // 👤 ترحيل للعميل (آجل)
   // ===============================
   if (type === "credit") {
     await supabase.from("daily_sales").insert({
@@ -212,7 +222,7 @@ async function processSale(productId, invoiceId, qty, price, type, customerId, c
   }
 
   // ===============================
-  // 🏬 ترحيل للمحل
+  // 🏬 ترحيل للمحل (دائن للمحل)
   // ===============================
   if (type === "shop") {
     await supabase.from("shop_credits").insert({
@@ -228,8 +238,7 @@ async function processSale(productId, invoiceId, qty, price, type, customerId, c
   // ===============================
   await checkInvoiceClose(invoiceId);
 
-  alert("تم البيع");
-
+  toast("تم البيع بنجاح");
   openSalesInvoice(invoiceId);
 }
 
@@ -243,16 +252,18 @@ async function checkInvoiceClose(invoiceId) {
     .select("*")
     .eq("invoice_id", invoiceId);
 
+  // الفاتورة تغلق فقط إذا تم بيع أو إرجاع كل الكمية
   const allDone = products.every(p => {
-    const remaining = p.qty - p.sold - p.returned;
+    const remaining = p.qty - (p.sold || 0) - (p.returned || 0);
     return remaining <= 0;
   });
 
   if (!allDone) return;
 
+  // حساب الإجمالي
   let gross = 0;
   products.forEach(p => {
-    gross += p.override_total ?? p.sales_total ?? 0;
+    gross += Number(p.sales_total || 0);
   });
 
   const { data: invoice } = await supabase
@@ -261,9 +272,10 @@ async function checkInvoiceClose(invoiceId) {
     .eq("id", invoiceId)
     .single();
 
-  const commission = gross * (invoice.commission_rate || 0.07);
-  const expenses = commission + invoice.noulon + invoice.mashal;
-  const net = gross - expenses - invoice.advance_payment;
+  const commissionRate = invoice.commission_rate || 0.07;
+  const commission = gross * commissionRate;
+  const expenses = commission + (invoice.noulon || 0) + (invoice.mashal || 0);
+  const net = gross - expenses - (invoice.advance_payment || 0);
 
   await dbUpdate("invoices", invoiceId, {
     status: "closed",
@@ -271,6 +283,8 @@ async function checkInvoiceClose(invoiceId) {
     total_expenses: expenses,
     net
   });
+
+  toast("تم إغلاق الفاتورة تلقائياً");
 }
 
 // ===============================
