@@ -1,4 +1,5 @@
-import { supabase, dbInsert } from "..core/data.js";
+import { supabase, dbInsert } from "../data.js";
+import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
 // 🎯 RENDER PAGE
@@ -16,7 +17,7 @@ export async function renderKhaznaPage(app) {
 
       <div>
         <button class="btn" onclick="openAddCollection()">➕ تحصيل من عميل</button>
-        <button class="btn" onclick="openAddExpense()">➖ مصروف</button>
+        <button class="btn btn-outline" onclick="openAddExpense()">➖ مصروف</button>
       </div>
     </div>
 
@@ -61,9 +62,10 @@ function calcStats(c, e) {
 
 window.openAddCollection = async function () {
   const name = prompt("اسم العميل");
-  const amount = Number(prompt("المبلغ"));
+  if (!name) return;
 
-  if (!name || !amount) return;
+  const amount = Number(prompt("المبلغ"));
+  if (!amount || amount <= 0) return;
 
   const { data: customer } = await supabase
     .from("customers")
@@ -72,42 +74,48 @@ window.openAddCollection = async function () {
     .single();
 
   if (!customer) {
-    alert("العميل غير موجود");
+    toast("العميل غير موجود", "error");
     return;
   }
 
-  await dbInsert("collections", {
+  const ok = await dbInsert("collections", {
     customer_id: customer.id,
     amount,
     date: new Date().toISOString()
   });
 
-  alert("تم التحصيل");
-  navigate("khazna");
+  if (ok) {
+    toast("تم التحصيل");
+    navigate("khazna");
+  } else {
+    toast("فشل التحصيل", "error");
+  }
 };
 
 // ===============================
 // 💸 EXPENSE
 // ===============================
 
-window.openAddExpense = function () {
+window.openAddExpense = async function () {
   const desc = prompt("الوصف");
+  if (!desc) return;
+
   const amount = Number(prompt("المبلغ"));
+  if (!amount || amount <= 0) return;
 
-  if (!desc || !amount) return;
-
-  addExpense(desc, amount);
-};
-
-async function addExpense(description, amount) {
-  await dbInsert("expenses", {
-    description,
+  const ok = await dbInsert("expenses", {
+    description: desc,
     amount,
     date: new Date().toISOString()
   });
 
-  navigate("khazna");
-}
+  if (ok) {
+    toast("تم إضافة المصروف");
+    navigate("khazna");
+  } else {
+    toast("فشل الإضافة", "error");
+  }
+};
 
 // ===============================
 // 📋 RENDER
@@ -118,7 +126,8 @@ function renderCollections(list) {
 
   return list.map(x => `
     <div class="row">
-      💰 ${x.amount} - ${x.date?.split("T")[0]}
+      <span>💰 ${formatCurrency(x.amount)}</span>
+      <span>${x.date?.split("T")[0]}</span>
     </div>
   `).join("");
 }
@@ -128,13 +137,14 @@ function renderExpenses(list) {
 
   return list.map(x => `
     <div class="row">
-      ❌ ${x.description} - ${x.amount}
+      <span>❌ ${x.description}</span>
+      <span>${formatCurrency(x.amount)}</span>
     </div>
   `).join("");
 }
 
 function card(title, val) {
-  return `<div class="card"><h4>${title}</h4><h2>${val}</h2></div>`;
+  return `<div class="card"><h4>${title}</h4><h2>${formatCurrency(val)}</h2></div>`;
 }
 
 function empty() {
