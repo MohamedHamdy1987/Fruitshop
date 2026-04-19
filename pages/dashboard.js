@@ -1,183 +1,86 @@
 import { supabase } from "../data.js";
-
-// ===============================
-// 🎯 RENDER DASHBOARD
-// ===============================
+import { formatCurrency } from "../ui.js";
 
 export async function renderDashboard(app) {
-  // تحميل Chart.js إذا لم يكن موجوداً
-  if (!window.Chart) {
-    await loadChartJS();
-  }
+  const today = new Date();
+  const day = today.getDate();
+  const monthNames = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+  const month = monthNames[today.getMonth()];
+  const year = today.getFullYear();
+  const weekdays = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const weekday = weekdays[today.getDay()];
+
+  // الحصول على اسم المحل من البروفايل
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .single();
+
+  const shopName = profile?.full_name || "محل الحاج حمدي السنوسي وأولاده";
 
   app.innerHTML = `
-    <div class="grid">
-      <div class="card">
-        <h3>📊 المبيعات اليومية</h3>
-        <canvas id="salesChart"></canvas>
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      <!-- بطاقة الترحيب والتاريخ -->
+      <div class="card" style="padding: 32px 28px; background: linear-gradient(135deg, #FDF8F2 0%, #F5EDE3 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <h1 style="font-size: 32px; font-weight: 800; margin-bottom: 8px; color: #3E2E21;">${shopName}</h1>
+            <p style="font-size: 18px; color: #6B4F32; margin-bottom: 20px;">إدارة متكاملة</p>
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+              <span style="font-size: 64px; font-weight: 800; color: #8B5E3C;">${day}</span>
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-size: 20px; font-weight: 600;">${weekday}</span>
+                <span style="font-size: 18px; color: #6B4F32;">${month} ${year}</span>
+              </div>
+            </div>
+          </div>
+          <div style="background: white; padding: 12px 20px; border-radius: 60px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+            <span style="color: #C9A96E; font-weight: 700;">✓ محفوظ على السحابة</span>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <h3>💰 الأرباح</h3>
-        <canvas id="profitChart"></canvas>
-      </div>
-    </div>
-    <div class="grid" style="margin-top: 20px;">
-      <div class="card">
-        <h3>📈 ملخص سريع</h3>
-        <div id="summary-stats">جاري التحميل...</div>
+
+      <!-- ملخص سريع -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 20px;">
+        ${await summaryCard("المبيعات اليوم", await getTodaySales())}
+        ${await summaryCard("العملاء", await getCustomersCount())}
+        ${await summaryCard("الفواتير المفتوحة", await getOpenInvoices())}
+        ${await summaryCard("صافي الخزنة", await getNetCash())}
       </div>
     </div>
   `;
-
-  await loadCharts();
-  await loadSummary();
 }
 
-// ===============================
-// 📊 LOAD CHARTS
-// ===============================
-
-async function loadCharts() {
-  const { data: sales } = await supabase.from("sales").select("*");
-  const { data: invoices } = await supabase.from("invoices").select("*");
-
-  const daily = groupByDate(sales);
-  const profit = groupProfit(invoices);
-
-  drawSalesChart(daily);
-  drawProfitChart(profit);
-}
-
-// ===============================
-// 📈 GROUP DATA
-// ===============================
-
-function groupByDate(data) {
-  const map = {};
-
-  data?.forEach(s => {
-    const d = s.created_at?.split("T")[0];
-    if (!map[d]) map[d] = 0;
-    map[d] += Number(s.total || 0);
-  });
-
-  // ترتيب التواريخ
-  return Object.keys(map).sort().reduce((obj, key) => {
-    obj[key] = map[key];
-    return obj;
-  }, {});
-}
-
-function groupProfit(data) {
-  const map = {};
-
-  data?.forEach(i => {
-    if (i.status !== "closed") return;
-    const d = i.date;
-    if (!map[d]) map[d] = 0;
-    map[d] += Number(i.net || 0);
-  });
-
-  return Object.keys(map).sort().reduce((obj, key) => {
-    obj[key] = map[key];
-    return obj;
-  }, {});
-}
-
-// ===============================
-// 📊 DRAW CHARTS
-// ===============================
-
-function drawSalesChart(data) {
-  const ctx = document.getElementById("salesChart");
-  if (!ctx) return;
-
-  new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: Object.keys(data),
-      datasets: [{
-        label: "المبيعات",
-        data: Object.values(data),
-        borderWidth: 3,
-        borderColor: "#14b8a6",
-        tension: 0.3,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: 'white' } }
-      },
-      scales: {
-        x: { ticks: { color: 'white' } },
-        y: { ticks: { color: 'white' } }
-      }
-    }
-  });
-}
-
-function drawProfitChart(data) {
-  const ctx = document.getElementById("profitChart");
-  if (!ctx) return;
-
-  new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: Object.keys(data),
-      datasets: [{
-        label: "الأرباح",
-        data: Object.values(data),
-        backgroundColor: "#22c55e",
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: 'white' } }
-      },
-      scales: {
-        x: { ticks: { color: 'white' } },
-        y: { ticks: { color: 'white' } }
-      }
-    }
-  });
-}
-
-// ===============================
-// 📋 LOAD SUMMARY
-// ===============================
-
-async function loadSummary() {
-  const container = document.getElementById("summary-stats");
-  if (!container) return;
-
-  // إحصائيات سريعة
-  const { data: sales } = await supabase.from("sales").select("total");
-  const { data: customers } = await supabase.from("customers").select("id");
-  const { data: invoices } = await supabase.from("invoices").select("status");
-
-  const totalSales = sales?.reduce((s, x) => s + Number(x.total || 0), 0) || 0;
-  const activeInvoices = invoices?.filter(i => i.status === "open").length || 0;
-
-  container.innerHTML = `
-    <p>💰 إجمالي المبيعات: ${totalSales.toLocaleString()} ج.م</p>
-    <p>👥 عدد العملاء: ${customers?.length || 0}</p>
-    <p>📄 فواتير مفتوحة: ${activeInvoices}</p>
+async function summaryCard(title, value) {
+  return `
+    <div class="card" style="text-align: center;">
+      <h4 style="color: #6B4F32; margin-bottom: 12px;">${title}</h4>
+      <div style="font-size: 36px; font-weight: 800; color: #8B5E3C;">${value}</div>
+    </div>
   `;
 }
 
-// ===============================
-// 📦 LOAD CHART.JS
-// ===============================
+async function getTodaySales() {
+  const today = new Date().toISOString().split("T")[0];
+  const { data } = await supabase.from("sales").select("total").gte("created_at", today);
+  const sum = data?.reduce((s, x) => s + Number(x.total), 0) || 0;
+  return formatCurrency(sum);
+}
 
-function loadChartJS() {
-  return new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js";
-    script.onload = resolve;
-    document.head.appendChild(script);
-  });
+async function getCustomersCount() {
+  const { count } = await supabase.from("customers").select("*", { count: "exact", head: true });
+  return count || 0;
+}
+
+async function getOpenInvoices() {
+  const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true }).eq("status", "open");
+  return count || 0;
+}
+
+async function getNetCash() {
+  const { data: col } = await supabase.from("collections").select("amount");
+  const { data: exp } = await supabase.from("expenses").select("amount");
+  const cash = col?.reduce((s, x) => s + Number(x.amount), 0) || 0;
+  const expenses = exp?.reduce((s, x) => s + Number(x.amount), 0) || 0;
+  return formatCurrency(cash - expenses);
 }
