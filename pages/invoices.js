@@ -1,4 +1,4 @@
-import { supabase, dbInsert, dbUpdate } from "../data.js";
+import { supabase, dbUpdate } from "../data.js";
 import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
@@ -46,7 +46,6 @@ function renderCard(inv) {
 window.openCreateInvoice = async function () {
   const app = document.getElementById("app");
 
-  // جلب جميع الموردين
   const { data: suppliers } = await supabase
     .from("suppliers")
     .select("*")
@@ -75,15 +74,10 @@ window.openCreateInvoice = async function () {
     </div>
   `;
 
-  // إظهار/إخفاء حقول المورد الجديد
   const select = document.getElementById("supplier-select");
   select.addEventListener("change", (e) => {
     const newFields = document.getElementById("new-supplier-fields");
-    if (e.target.value === "new") {
-      newFields.style.display = "block";
-    } else {
-      newFields.style.display = "none";
-    }
+    newFields.style.display = e.target.value === "new" ? "block" : "none";
   });
 };
 
@@ -91,7 +85,6 @@ window.submitNewInvoice = async function () {
   const select = document.getElementById("supplier-select");
   let supplierId = select.value;
 
-  // إذا اختار "مورد جديد"
   if (supplierId === "new") {
     const name = document.getElementById("new-supplier-name").value.trim();
     if (!name) {
@@ -100,7 +93,6 @@ window.submitNewInvoice = async function () {
     }
     const phone = document.getElementById("new-supplier-phone").value.trim();
 
-    // إنشاء المورد الجديد
     const { data: newSupplier, error } = await supabase
       .from("suppliers")
       .insert({ name, phone })
@@ -109,6 +101,7 @@ window.submitNewInvoice = async function () {
 
     if (error) {
       toast("فشل إنشاء المورد: " + error.message, "error");
+      console.error("Supplier insert error:", error);
       return;
     }
     supplierId = newSupplier.id;
@@ -120,30 +113,45 @@ window.submitNewInvoice = async function () {
     return;
   }
 
-  // جلب بيانات المورد
-  const { data: supplier } = await supabase
+  const { data: supplier, error: supError } = await supabase
     .from("suppliers")
     .select("*")
     .eq("id", supplierId)
     .single();
 
-  // إنشاء الفاتورة
-  const ok = await dbInsert("invoices", {
-    supplier_id: supplier.id,
-    supplier_name: supplier.name,
-    date: new Date().toISOString().split("T")[0],
-    status: "open",
-    noulon: 0,
-    mashal: 0,
-    advance_payment: 0,
-    commission_rate: 0.07
-  });
+  if (supError || !supplier) {
+    toast("المورد غير موجود", "error");
+    return;
+  }
 
-  if (ok) {
-    toast("تم إنشاء الفاتورة");
-    navigate("invoices");
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData?.user;
+
+  if (!user) {
+    toast("يجب تسجيل الدخول", "error");
+    return;
+  }
+
+  const { error: insertError } = await supabase
+    .from("invoices")
+    .insert({
+      supplier_id: supplier.id,
+      supplier_name: supplier.name,
+      date: new Date().toISOString().split("T")[0],
+      status: "open",
+      noulon: 0,
+      mashal: 0,
+      advance_payment: 0,
+      commission_rate: 0.07,
+      user_id: user.id
+    });
+
+  if (insertError) {
+    toast("فشل إنشاء الفاتورة: " + insertError.message, "error");
+    console.error("Invoice insert error:", insertError);
   } else {
-    toast("فشل إنشاء الفاتورة", "error");
+    toast("تم إنشاء الفاتورة بنجاح", "success");
+    navigate("invoices");
   }
 };
 
