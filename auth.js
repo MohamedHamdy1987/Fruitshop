@@ -1,17 +1,17 @@
 import { supabase } from "./data.js";
 
 // ===============================
-// 🔐 SIGN UP
+// 🔐 SIGN UP (تلقائي الدخول بدون تأكيد)
 // ===============================
 
 export async function signUp(email, password, fullName) {
+  // 1. إنشاء الحساب
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: {
-        full_name: fullName
-      }
+      data: { full_name: fullName },
+      emailRedirectTo: window.location.origin
     }
   });
 
@@ -20,20 +20,35 @@ export async function signUp(email, password, fullName) {
     return { success: false, error: error.message };
   }
 
-  // إنشاء بروفايل للمستخدم
-  if (data?.user) {
+  const user = data?.user;
+
+  if (user) {
+    // إنشاء البروفايل والتجربة المجانية
     await supabase.from("profiles").insert({
-      id: data.user.id,
+      id: user.id,
       full_name: fullName,
       email: email,
       subscription_status: "trial"
     });
 
-    // إنشاء تجربة مجانية
-    await createTrialSubscription(data.user.id);
+    await createTrialSubscription(user.id);
+
+    // ✅ تسجيل الدخول التلقائي (حتى لو كان البريد غير مؤكد)
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (signInError) {
+      console.warn("Auto sign-in failed:", signInError.message);
+      // إذا فشل الدخول التلقائي (نادر)، نعيد نجاح التسجيل مع تنبيه
+      return { success: true, user, needsEmailConfirmation: true };
+    }
+
+    return { success: true, user, autoSignedIn: true };
   }
 
-  return { success: true, user: data?.user };
+  return { success: false, error: "لم يتم إنشاء المستخدم" };
 }
 
 // ===============================
