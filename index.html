@@ -22,7 +22,7 @@
 
     .hero {
       text-align: center;
-      padding: 80px 20px;
+      padding: 60px 20px 40px;
     }
 
     .hero h1 {
@@ -36,18 +36,65 @@
       color: #555;
     }
 
+    .auth-box {
+      background: white;
+      max-width: 400px;
+      margin: 20px auto;
+      padding: 30px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+
+    .auth-box h2 {
+      margin-top: 0;
+      text-align: center;
+      color: #0f766e;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
     .btn {
-      margin-top: 20px;
-      padding: 14px 30px;
+      width: 100%;
+      padding: 14px;
       border: none;
       border-radius: 8px;
       font-size: 16px;
       cursor: pointer;
+      font-weight: bold;
+      transition: 0.3s;
     }
 
     .btn-primary {
       background: #14b8a6;
       color: white;
+    }
+
+    .btn-primary:hover {
+      background: #0f766e;
+    }
+
+    .btn-secondary {
+      background: #e2e8f0;
+      color: #333;
+      margin-top: 10px;
+    }
+
+    .toggle-link {
+      text-align: center;
+      margin-top: 15px;
+      color: #14b8a6;
+      cursor: pointer;
     }
 
     .features {
@@ -69,6 +116,20 @@
       padding: 40px;
       color: #777;
     }
+
+    .error-msg {
+      color: #ef4444;
+      font-size: 14px;
+      margin-top: 5px;
+      display: none;
+    }
+
+    .success-msg {
+      color: #22c55e;
+      font-size: 14px;
+      margin-top: 5px;
+      display: none;
+    }
   </style>
 </head>
 
@@ -78,62 +139,190 @@
 
     <!-- HERO -->
     <div class="hero">
-      <h1>نظام إدارة سوق الخضار والفواكه</h1>
+      <h1>🍎 نظام إدارة سوق الخضار والفواكه</h1>
       <p>
-        إدارة الفواتير، المبيعات، الموردين، العملاء، الترحيلات والخزنة  
+        إدارة الفواتير، المبيعات، الموردين، العملاء، الترحيلات والخزنة<br>
         في نظام واحد سهل وسريع
       </p>
+    </div>
 
-      <button class="btn btn-primary" onclick="goToApp()">
-        🚀 ابدأ الآن
+    <!-- AUTH BOX -->
+    <div class="auth-box">
+      <h2 id="auth-title">تسجيل الدخول</h2>
+
+      <form id="auth-form" onsubmit="return false;">
+        <div class="form-group" id="name-group" style="display: none;">
+          <input type="text" id="full-name" placeholder="الاسم الكامل" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <input type="email" id="email" placeholder="البريد الإلكتروني" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <input type="password" id="password" placeholder="كلمة المرور" required autocomplete="current-password">
+        </div>
+
+        <div class="error-msg" id="error-msg"></div>
+        <div class="success-msg" id="success-msg"></div>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+          🚀 دخول
+        </button>
+      </form>
+
+      <button class="btn btn-secondary" id="toggle-mode">
+        ⭐ إنشاء حساب جديد
       </button>
+
+      <div class="toggle-link" id="forgot-password">
+        نسيت كلمة المرور؟
+      </div>
     </div>
 
     <!-- FEATURES -->
     <div class="features">
-
       <div class="card">
         <h3>📄 إدارة الفواتير</h3>
         <p>إنشاء فواتير الموردين وإدارة الأصناف بسهولة</p>
       </div>
-
       <div class="card">
         <h3>🛒 المبيعات</h3>
         <p>بيع مباشر من الفواتير مع متابعة الباقي</p>
       </div>
-
       <div class="card">
         <h3>👥 العملاء</h3>
         <p>كشف حساب لحظي ويومية تلقائية</p>
       </div>
-
       <div class="card">
         <h3>💰 الخزنة</h3>
         <p>تحصيلات ومصروفات كاملة</p>
       </div>
-
       <div class="card">
         <h3>🏬 محلات السوق</h3>
         <p>حسابات بينك وبين التجار الآخرين</p>
       </div>
-
       <div class="card">
         <h3>📊 تقارير</h3>
         <p>لوحة تحكم تعرض كل الأرقام المهمة</p>
       </div>
-
     </div>
 
     <!-- FOOTER -->
     <div class="footer">
       © 2026 جميع الحقوق محفوظة
     </div>
-
   </div>
 
-  <script>
-    function goToApp() {
-      window.location.href = "app.html";
+  <script type="module">
+    import { capitalizeFirstLetter } from './utils.js';
+    import { signUp, signIn, resetPassword } from './auth.js';
+
+    // DOM Elements
+    const authTitle = document.getElementById('auth-title');
+    const nameGroup = document.getElementById('name-group');
+    const submitBtn = document.getElementById('submit-btn');
+    const toggleBtn = document.getElementById('toggle-mode');
+    const forgotLink = document.getElementById('forgot-password');
+    const errorMsg = document.getElementById('error-msg');
+    const successMsg = document.getElementById('success-msg');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const fullNameInput = document.getElementById('full-name');
+
+    let mode = 'signin'; // 'signin' or 'signup'
+
+    // Toggle between Sign In and Sign Up
+    toggleBtn.addEventListener('click', () => {
+      if (mode === 'signin') {
+        mode = 'signup';
+        authTitle.textContent = 'إنشاء حساب جديد';
+        nameGroup.style.display = 'block';
+        submitBtn.textContent = '✨ إنشاء حساب';
+        toggleBtn.textContent = '🔐 لدي حساب بالفعل';
+        forgotLink.style.display = 'none';
+        fullNameInput.required = true;
+      } else {
+        mode = 'signin';
+        authTitle.textContent = 'تسجيل الدخول';
+        nameGroup.style.display = 'none';
+        submitBtn.textContent = '🚀 دخول';
+        toggleBtn.textContent = '⭐ إنشاء حساب جديد';
+        forgotLink.style.display = 'block';
+        fullNameInput.required = false;
+      }
+      clearMessages();
+    });
+
+    // Forgot Password
+    forgotLink.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      if (!email) {
+        showError('يرجى إدخال البريد الإلكتروني أولاً');
+        return;
+      }
+
+      const result = await resetPassword(email);
+      if (result.success) {
+        showSuccess('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني');
+      } else {
+        showError(result.error || 'حدث خطأ');
+      }
+    });
+
+    // Handle Form Submit
+    document.getElementById('auth-form').addEventListener('submit', async () => {
+      clearMessages();
+
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (!email || !password) {
+        showError('جميع الحقول مطلوبة');
+        return;
+      }
+
+      if (mode === 'signup') {
+        const fullName = fullNameInput.value.trim();
+        if (!fullName) {
+          showError('الاسم الكامل مطلوب');
+          return;
+        }
+
+        const result = await signUp(email, password, fullName);
+        if (result.success) {
+          showSuccess('تم إنشاء الحساب بنجاح! تفقد بريدك الإلكتروني لتأكيد الحساب.');
+          // Auto switch to sign in after 3 seconds
+          setTimeout(() => {
+            mode = 'signin';
+            toggleBtn.click();
+          }, 3000);
+        } else {
+          showError(result.error || 'فشل إنشاء الحساب');
+        }
+      } else {
+        const result = await signIn(email, password);
+        if (result.success) {
+          window.location.href = 'app.html';
+        } else {
+          showError(result.error || 'بيانات الدخول غير صحيحة');
+        }
+      }
+    });
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      successMsg.style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+      successMsg.textContent = msg;
+      successMsg.style.display = 'block';
+      errorMsg.style.display = 'none';
+    }
+
+    function clearMessages() {
+      errorMsg.style.display = 'none';
+      successMsg.style.display = 'none';
     }
   </script>
 
