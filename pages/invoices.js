@@ -1,4 +1,5 @@
-import { supabase, dbInsert, dbUpdate } from "..core/data.js";
+import { supabase, dbInsert, dbUpdate } from "../data.js";
+import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
 // 🎯 RENDER PAGE
@@ -25,12 +26,15 @@ export async function renderInvoicesPage(app) {
 // ===============================
 
 function renderCard(inv) {
+  const statusBadge = inv.status === "closed" 
+    ? '<span style="color:#22c55e">● منتهية</span>' 
+    : '<span style="color:#f59e0b">● مفتوحة</span>';
+
   return `
     <div class="card">
       <h3>${inv.supplier_name}</h3>
-      <p>📅 ${inv.date}</p>
-
-      <button onclick="openInvoice('${inv.id}')">📂 فتح</button>
+      <p>📅 ${inv.date} - ${statusBadge}</p>
+      <button class="btn" onclick="openInvoice('${inv.id}')">📂 فتح</button>
     </div>
   `;
 }
@@ -41,7 +45,6 @@ function renderCard(inv) {
 
 window.openCreateInvoice = async function () {
   const name = prompt("اسم المورد");
-
   if (!name) return;
 
   const { data: supplier } = await supabase
@@ -51,11 +54,11 @@ window.openCreateInvoice = async function () {
     .single();
 
   if (!supplier) {
-    alert("المورد غير موجود");
+    toast("المورد غير موجود", "error");
     return;
   }
 
-  await dbInsert("invoices", {
+  const ok = await dbInsert("invoices", {
     supplier_id: supplier.id,
     supplier_name: supplier.name,
     date: new Date().toISOString().split("T")[0],
@@ -63,10 +66,15 @@ window.openCreateInvoice = async function () {
     noulon: 0,
     mashal: 0,
     advance_payment: 0,
+    commission_rate: 0.07 // افتراضي
   });
 
-  alert("تم إنشاء الفاتورة");
-  navigate("invoices");
+  if (ok) {
+    toast("تم إنشاء الفاتورة");
+    navigate("invoices");
+  } else {
+    toast("فشل الإنشاء", "error");
+  }
 };
 
 // ===============================
@@ -88,22 +96,37 @@ window.openInvoice = async function (id) {
     .eq("invoice_id", id);
 
   app.innerHTML = `
-    <button onclick="navigate('invoices')">⬅️ رجوع</button>
+    <button class="btn btn-outline" onclick="navigate('invoices')">⬅️ رجوع</button>
 
-    <h2>فاتورة: ${invoice.supplier_name}</h2>
+    <h2>فاتورة: ${invoice.supplier_name} - ${invoice.date}</h2>
 
-    <div class="grid">
-      <input id="noulon" value="${invoice.noulon}" placeholder="نولون">
-      <input id="mashal" value="${invoice.mashal}" placeholder="مشال">
-      <input id="advance" value="${invoice.advance_payment}" placeholder="دفعة">
-      <button onclick="saveExpenses('${id}')">💾 حفظ</button>
+    <div class="card">
+      <div class="grid" style="grid-template-columns: repeat(4,1fr);">
+        <div>
+          <label>نولون</label>
+          <input id="noulon" type="number" value="${invoice.noulon || 0}" class="form-control" style="width:100%; padding:8px; border-radius:8px; border:none;">
+        </div>
+        <div>
+          <label>مشال</label>
+          <input id="mashal" type="number" value="${invoice.mashal || 0}" class="form-control" style="width:100%; padding:8px; border-radius:8px; border:none;">
+        </div>
+        <div>
+          <label>دفعة مقدمة</label>
+          <input id="advance" type="number" value="${invoice.advance_payment || 0}" class="form-control" style="width:100%; padding:8px; border-radius:8px; border:none;">
+        </div>
+        <div>
+          <label>نسبة العمولة %</label>
+          <input id="commission" type="number" step="0.01" value="${(invoice.commission_rate || 0.07) * 100}" class="form-control" style="width:100%; padding:8px; border-radius:8px; border:none;">
+        </div>
+      </div>
+      <button class="btn" onclick="saveExpenses('${id}')" style="margin-top:15px;">💾 حفظ المصاريف</button>
     </div>
 
     <button class="btn btn-primary" onclick="openAddProduct('${id}')">
       ➕ إضافة صنف
     </button>
 
-    ${renderProducts(products)}
+    ${renderProducts(products, id)}
   `;
 };
 
@@ -112,52 +135,63 @@ window.openInvoice = async function (id) {
 // ===============================
 
 window.saveExpenses = async function (id) {
-  const noulon = Number(document.getElementById("noulon").value);
-  const mashal = Number(document.getElementById("mashal").value);
-  const advance = Number(document.getElementById("advance").value);
+  const noulon = Number(document.getElementById("noulon").value) || 0;
+  const mashal = Number(document.getElementById("mashal").value) || 0;
+  const advance = Number(document.getElementById("advance").value) || 0;
+  const commissionPercent = Number(document.getElementById("commission").value) || 7;
+  const commissionRate = commissionPercent / 100;
 
-  await dbUpdate("invoices", id, {
+  const ok = await dbUpdate("invoices", id, {
     noulon,
     mashal,
-    advance_payment: advance
+    advance_payment: advance,
+    commission_rate: commissionRate
   });
 
-  alert("تم الحفظ");
+  if (ok) {
+    toast("تم الحفظ");
+    openInvoice(id);
+  } else {
+    toast("فشل الحفظ", "error");
+  }
 };
 
 // ===============================
 // ➕ ADD PRODUCT
 // ===============================
 
-window.openAddProduct = function (invoiceId) {
+window.openAddProduct = async function (invoiceId) {
   const name = prompt("اسم الصنف");
-  const qty = Number(prompt("العدد"));
-  const unit = prompt("الوحدة");
+  if (!name) return;
 
-  if (!name || !qty) return;
+  const qty = Number(prompt("الكمية"));
+  if (!qty || qty <= 0) return;
 
-  addProduct(invoiceId, name, qty, unit);
-};
+  const unit = prompt("الوحدة (كرتونة/كيلو/...)");
 
-async function addProduct(invoiceId, name, qty, unit) {
-  await supabase.from("invoice_products").insert({
+  const { error } = await supabase.from("invoice_products").insert({
     invoice_id: invoiceId,
     name,
     qty,
     unit,
     sold: 0,
-    returned: 0
+    returned: 0,
+    sales_total: 0
   });
 
-  alert("تم إضافة الصنف");
-  openInvoice(invoiceId);
-}
+  if (!error) {
+    toast("تم إضافة الصنف");
+    openInvoice(invoiceId);
+  } else {
+    toast("فشل الإضافة: " + error.message, "error");
+  }
+};
 
 // ===============================
-// 📦 PRODUCTS
+// 📦 PRODUCTS TABLE
 // ===============================
 
-function renderProducts(products) {
+function renderProducts(products, invoiceId) {
   if (!products?.length) return empty("لا توجد أصناف");
 
   return `
@@ -167,18 +201,25 @@ function renderProducts(products) {
           <th>الصنف</th>
           <th>الكمية</th>
           <th>المباع</th>
+          <th>المرتجع</th>
           <th>المتبقي</th>
+          <th>الإجمالي</th>
         </tr>
       </thead>
       <tbody>
-        ${products.map(p => `
-          <tr>
-            <td>${p.name}</td>
-            <td>${p.qty}</td>
-            <td>${p.sold}</td>
-            <td>${p.qty - p.sold - p.returned}</td>
-          </tr>
-        `).join("")}
+        ${products.map(p => {
+          const remaining = p.qty - p.sold - (p.returned || 0);
+          return `
+            <tr>
+              <td>${p.name}</td>
+              <td>${p.qty}</td>
+              <td>${p.sold || 0}</td>
+              <td>${p.returned || 0}</td>
+              <td>${remaining}</td>
+              <td>${formatCurrency(p.sales_total || 0)}</td>
+            </tr>
+          `;
+        }).join("")}
       </tbody>
     </table>
   `;
