@@ -1,13 +1,7 @@
-window.addEventListener("DOMContentLoaded", () => {
-  alert("DOM LOADED");
+alert("app.js شغال");
 
-  const app = document.getElementById("app");
-
-  // تجربة بسيطة
-  document.querySelectorAll("[data-nav]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const page = btn.getAttribute("data-nav");
-      app.innerHTML = `<h2>فتحت صفحة: ${page}</h2>`;
-    });
+document.querySelectorAll("[data-nav]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    alert("click شغال");
   });
 });
