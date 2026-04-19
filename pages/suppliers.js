@@ -1,4 +1,5 @@
-import { supabase, dbInsert, dbUpdate } from "..core/data.js";
+import { supabase, dbInsert } from "../data.js";
+import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
 // 🎯 RENDER SUPPLIERS PAGE
@@ -30,7 +31,7 @@ function renderCard(s) {
       <h3>${s.name}</h3>
       <p>📞 ${s.phone || "-"}</p>
 
-      <button onclick="openSupplier('${s.id}', '${s.name}')">📂 عرض الحساب</button>
+      <button class="btn" onclick="openSupplier('${s.id}', '${s.name}')">📂 عرض الحساب</button>
     </div>
   `;
 }
@@ -39,23 +40,21 @@ function renderCard(s) {
 // ➕ ADD SUPPLIER
 // ===============================
 
-window.openAddSupplier = function () {
+window.openAddSupplier = async function () {
   const name = prompt("اسم المورد");
-  const phone = prompt("رقم الهاتف");
-
   if (!name) return;
 
-  addSupplier(name, phone);
-};
+  const phone = prompt("رقم الهاتف");
 
-async function addSupplier(name, phone) {
   const ok = await dbInsert("suppliers", { name, phone });
 
   if (ok) {
-    alert("تم إضافة المورد");
+    toast("تم إضافة المورد");
     navigate("suppliers");
+  } else {
+    toast("فشل الإضافة", "error");
   }
-}
+};
 
 // ===============================
 // 📂 OPEN SUPPLIER ACCOUNT
@@ -73,12 +72,12 @@ window.openSupplier = async function (supplierId, supplierName) {
   const balance = calculateBalance(invoices);
 
   app.innerHTML = `
-    <button onclick="navigate('suppliers')">⬅️ رجوع</button>
+    <button class="btn btn-outline" onclick="navigate('suppliers')">⬅️ رجوع</button>
 
     <h2>📊 حساب المورد: ${supplierName}</h2>
 
     <div class="card">
-      <h3>الرصيد: ${balance} جنيه</h3>
+      <h3>الرصيد المستحق: ${formatCurrency(balance)}</h3>
     </div>
 
     ${renderInvoices(invoices)}
@@ -92,9 +91,9 @@ window.openSupplier = async function (supplierId, supplierName) {
 function calculateBalance(invoices) {
   let total = 0;
 
-  invoices.forEach(inv => {
+  invoices?.forEach(inv => {
     if (inv.status === "closed") {
-      total += inv.net || 0;
+      total += Number(inv.net || 0);
     }
   });
 
@@ -114,6 +113,7 @@ function renderInvoices(invoices) {
         <tr>
           <th>التاريخ</th>
           <th>الحالة</th>
+          <th>الإجمالي</th>
           <th>الصافي</th>
         </tr>
       </thead>
@@ -122,7 +122,8 @@ function renderInvoices(invoices) {
           <tr>
             <td>${inv.date}</td>
             <td>${status(inv.status)}</td>
-            <td>${inv.net || 0}</td>
+            <td>${formatCurrency(inv.gross || 0)}</td>
+            <td>${formatCurrency(inv.net || 0)}</td>
           </tr>
         `).join("")}
       </tbody>
@@ -135,8 +136,8 @@ function renderInvoices(invoices) {
 // ===============================
 
 function status(s) {
-  if (s === "closed") return `<span style="color:green">منتهية</span>`;
-  return `<span style="color:orange">مفتوحة</span>`;
+  if (s === "closed") return `<span style="color:#22c55e">منتهية</span>`;
+  return `<span style="color:#f59e0b">مفتوحة</span>`;
 }
 
 // ===============================
