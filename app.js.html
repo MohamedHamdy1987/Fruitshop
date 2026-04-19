@@ -1,0 +1,114 @@
+// ===============================
+// 📦 IMPORTS
+// ===============================
+
+import { getCurrentUser } from "./data.js";
+import { checkSubscription } from "./subscription.js";
+
+// الصفحات
+import { renderDashboard } from "./pages/dashboard.js";
+import { renderInvoicesPage } from "./pages/invoices.js";
+import { renderSalesPage } from "./pages/sales.js";
+import { renderSuppliersPage } from "./pages/suppliers.js";
+import { renderCustomersPage } from "./pages/customers.js";
+import { renderTarhilPage } from "./pages/tarhil.js";
+import { renderKhaznaPage } from "./pages/khazna.js";
+import { renderEmployeesPage } from "./pages/employees.js";
+import { renderShopsPage } from "./pages/shops.js";
+
+// ===============================
+// 🧭 ROUTES
+// ===============================
+
+const routes = {
+  dashboard: renderDashboard,
+  invoices: renderInvoicesPage,
+  sales: renderSalesPage,
+  suppliers: renderSuppliersPage,
+  customers: renderCustomersPage,
+  tarhil: renderTarhilPage,
+  khazna: renderKhaznaPage,
+  employees: renderEmployeesPage,
+  shops: renderShopsPage,
+};
+
+// ===============================
+// 🚀 INIT APP
+// ===============================
+
+window.addEventListener("DOMContentLoaded", async () => {
+  const app = document.getElementById("app");
+
+  // 1️⃣ تحقق تسجيل الدخول
+  const user = await getCurrentUser();
+
+  if (!user) {
+    window.location.href = "index.html";
+    return;
+  }
+
+  // 2️⃣ تحقق الاشتراك
+  const isActive = await checkSubscription();
+
+  if (!isActive) {
+    app.innerHTML = `
+      <div class="center">
+        <h2>🚫 الاشتراك منتهي</h2>
+        <p>يرجى تجديد الاشتراك للاستمرار</p>
+      </div>
+    `;
+    return;
+  }
+
+  // 3️⃣ تشغيل التطبيق
+  setupNavigation();
+  navigate("dashboard");
+});
+
+// ===============================
+// 🔁 NAVIGATION
+// ===============================
+
+window.navigate = async function (page) {
+  const app = document.getElementById("app");
+
+  try {
+    app.innerHTML = `<div class="loading">جاري التحميل...</div>`;
+
+    if (!routes[page]) {
+      app.innerHTML = `<p>الصفحة غير موجودة</p>`;
+      return;
+    }
+
+    await routes[page](app);
+
+    setActive(page);
+
+  } catch (err) {
+    console.error("NAV ERROR:", err);
+    app.innerHTML = `<p>حدث خطأ</p>`;
+  }
+};
+
+// ===============================
+// 📌 MENU
+// ===============================
+
+function setupNavigation() {
+  document.querySelectorAll("[data-nav]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const page = btn.getAttribute("data-nav");
+      navigate(page);
+    });
+  });
+}
+
+function setActive(page) {
+  document.querySelectorAll("[data-nav]").forEach(btn => {
+    btn.classList.remove("active");
+
+    if (btn.getAttribute("data-nav") === page) {
+      btn.classList.add("active");
+    }
+  });
+}
