@@ -40,24 +40,38 @@ function renderCard(inv) {
 }
 
 // ===============================
-// ➕ CREATE INVOICE
+// ➕ CREATE INVOICE (مع إنشاء مورد تلقائي)
 // ===============================
 
 window.openCreateInvoice = async function () {
   const name = prompt("اسم المورد");
   if (!name) return;
 
-  const { data: supplier } = await supabase
+  // 1. البحث عن المورد
+  let { data: supplier } = await supabase
     .from("suppliers")
     .select("*")
     .eq("name", name)
-    .single();
+    .maybeSingle();
 
+  // 2. إذا لم يوجد، ننشئه تلقائياً
   if (!supplier) {
-    toast("المورد غير موجود", "error");
-    return;
+    const phone = prompt("رقم هاتف المورد (اختياري)");
+    const { data: newSupplier, error: insertError } = await supabase
+      .from("suppliers")
+      .insert({ name, phone })
+      .select()
+      .single();
+
+    if (insertError) {
+      toast("فشل إنشاء المورد: " + insertError.message, "error");
+      return;
+    }
+    supplier = newSupplier;
+    toast("تم إضافة المورد تلقائياً", "success");
   }
 
+  // 3. إنشاء الفاتورة
   const ok = await dbInsert("invoices", {
     supplier_id: supplier.id,
     supplier_name: supplier.name,
@@ -66,14 +80,14 @@ window.openCreateInvoice = async function () {
     noulon: 0,
     mashal: 0,
     advance_payment: 0,
-    commission_rate: 0.07 // افتراضي
+    commission_rate: 0.07
   });
 
   if (ok) {
     toast("تم إنشاء الفاتورة");
     navigate("invoices");
   } else {
-    toast("فشل الإنشاء", "error");
+    toast("فشل إنشاء الفاتورة", "error");
   }
 };
 
