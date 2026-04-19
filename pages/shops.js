@@ -1,4 +1,5 @@
-import { supabase, dbInsert } from "..core/data.js";
+import { supabase, dbInsert } from "../data.js";
+import { toast, formatCurrency } from "../ui.js";
 
 // ===============================
 // 🎯 RENDER
@@ -13,7 +14,7 @@ export async function renderMarketShopsPage(app) {
   app.innerHTML = `
     <div class="header">
       <h2>🏬 محلات السوق</h2>
-      <button onclick="addShop()">➕ إضافة محل</button>
+      <button class="btn" onclick="addShop()">➕ إضافة محل</button>
     </div>
 
     ${!data?.length ? empty() : data.map(renderCard).join("")}
@@ -28,7 +29,7 @@ function renderCard(s) {
   return `
     <div class="card">
       <h3>${s.name}</h3>
-      <button onclick="openShop('${s.id}', '${s.name}')">
+      <button class="btn" onclick="openShop('${s.id}', '${s.name}')">
         📂 فتح الحساب
       </button>
     </div>
@@ -39,12 +40,17 @@ function renderCard(s) {
 // ➕ ADD SHOP
 // ===============================
 
-window.addShop = function () {
+window.addShop = async function () {
   const name = prompt("اسم المحل");
   if (!name) return;
 
-  dbInsert("market_shops", { name });
-  navigate("market_shops");
+  const ok = await dbInsert("market_shops", { name });
+  if (ok) {
+    toast("تم إضافة المحل");
+    navigate("market_shops");
+  } else {
+    toast("فشل الإضافة", "error");
+  }
 };
 
 // ===============================
@@ -70,7 +76,7 @@ window.openShop = async function (id, name) {
   const balance = totalCredit - totalDebit;
 
   app.innerHTML = `
-    <button onclick="navigate('market_shops')">⬅️ رجوع</button>
+    <button class="btn btn-outline" onclick="navigate('market_shops')">⬅️ رجوع</button>
 
     <h2>${name}</h2>
 
@@ -78,25 +84,25 @@ window.openShop = async function (id, name) {
 
       <!-- 🟢 لنا -->
       <div class="card">
-        <h3>🟢 لنا</h3>
+        <h3>🟢 لنا (دائن)</h3>
         ${renderCredits(credits)}
-        <h4>الإجمالي: ${totalCredit}</h4>
+        <h4>الإجمالي: ${formatCurrency(totalCredit)}</h4>
       </div>
 
       <!-- 🔴 لهم -->
       <div class="card">
-        <h3>🔴 لهم</h3>
+        <h3>🔴 لهم (مدين)</h3>
 
-        <button class="btn" onclick="addDebit('${id}')">➕ إضافة</button>
+        <button class="btn" onclick="addDebit('${id}')">➕ شراء من المحل</button>
 
         ${renderDebits(debits)}
-        <h4>الإجمالي: ${totalDebit}</h4>
+        <h4>الإجمالي: ${formatCurrency(totalDebit)}</h4>
       </div>
 
     </div>
 
     <hr>
-    <h2>💰 الفرق: ${balance}</h2>
+    <h2>💰 الفرق: ${formatCurrency(balance)} ${balance >= 0 ? '(لنا)' : '(علينا)'}</h2>
   `;
 };
 
@@ -106,10 +112,19 @@ window.openShop = async function (id, name) {
 
 window.addDebit = async function (shopId) {
   const product = prompt("الصنف");
-  const qty = Number(prompt("العدد"));
+  if (!product) return;
+
+  const qty = Number(prompt("الكمية"));
+  if (!qty || qty <= 0) return;
+
   const price = Number(prompt("السعر"));
+  if (!price) return;
 
   const type = prompt("نوع البيع: cash / credit");
+  if (!["cash", "credit"].includes(type)) {
+    toast("نوع غير صحيح", "error");
+    return;
+  }
 
   let customerId = null;
   let customerName = null;
@@ -124,7 +139,7 @@ window.addDebit = async function (shopId) {
       .single();
 
     if (!customer) {
-      alert("العميل غير موجود");
+      toast("العميل غير موجود", "error");
       return;
     }
 
@@ -135,7 +150,7 @@ window.addDebit = async function (shopId) {
   const today = new Date().toISOString().split("T")[0];
 
   // تسجيل علينا للمحل
-  await dbInsert("shop_debits", {
+  const ok = await dbInsert("shop_debits", {
     shop_id: shopId,
     product_name: product,
     qty,
@@ -143,11 +158,12 @@ window.addDebit = async function (shopId) {
     total,
     customer_id: customerId,
     customer_name: customerName,
-    type
+    type,
+    date: today
   });
 
   // لو آجل → يروح للعميل
-  if (type === "credit") {
+  if (type === "credit" && ok) {
     await supabase.from("daily_sales").insert({
       customer_id: customerId,
       customer_name: customerName,
@@ -159,7 +175,13 @@ window.addDebit = async function (shopId) {
     });
   }
 
-  openShop(shopId);
+  if (ok) {
+    toast("تمت الإضافة");
+    const { data: shop } = await supabase.from("market_shops").select("*").eq("id", shopId).single();
+    openShop(shopId, shop.name);
+  } else {
+    toast("فشل الإضافة", "error");
+  }
 };
 
 // ===============================
@@ -170,7 +192,10 @@ function renderCredits(list) {
   if (!list?.length) return `<p>لا يوجد</p>`;
 
   return list.map(x => `
-    <div class="row">💰 ${x.amount}</div>
+    <div class="row">
+      <span>💰 ${formatCurrency(x.amount)}</span>
+      <span>${x.date?.split("T")[0]}</span>
+    </div>
   `).join("");
 }
 
@@ -179,7 +204,8 @@ function renderDebits(list) {
 
   return list.map(x => `
     <div class="row">
-      ${x.product_name} - ${x.total}
+      <span>${x.product_name} (${x.qty}×${x.price})</span>
+      <span>${formatCurrency(x.total)}</span>
     </div>
   `).join("");
 }
