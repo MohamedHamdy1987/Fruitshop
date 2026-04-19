@@ -6,7 +6,7 @@
   <title>نظام محل الخضار والفواكه</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    /* ===== ألوان الهوية الجديدة ===== */
+    /* ===== ألوان الهوية ===== */
     :root {
       --primary-cream: #FDF8F2;
       --secondary-gold: #C9A96E;
@@ -188,7 +188,6 @@
       display: none !important;
     }
 
-    /* Responsive */
     @media (max-width: 480px) {
       .auth-container {
         padding: 28px 20px;
@@ -204,13 +203,11 @@
     <p>إدارة متكاملة لمحلك التجاري</p>
   </div>
 
-  <!-- تبويبات -->
   <div class="auth-tabs">
     <button class="auth-tab active" id="tabLogin">تسجيل الدخول</button>
     <button class="auth-tab" id="tabSignup">حساب جديد</button>
   </div>
 
-  <!-- نموذج تسجيل الدخول -->
   <form id="loginForm" class="auth-form">
     <div class="form-group">
       <label>البريد الإلكتروني</label>
@@ -224,7 +221,6 @@
     <div id="loginError" class="error-message"></div>
   </form>
 
-  <!-- نموذج إنشاء حساب (مخفي افتراضيًا) -->
   <form id="signupForm" class="auth-form hidden">
     <div class="form-group">
       <label>اسم المحل</label>
@@ -255,7 +251,6 @@
 <script type="module">
   import { signUp, signIn } from './auth.js';
 
-  // DOM elements
   const tabLogin = document.getElementById('tabLogin');
   const tabSignup = document.getElementById('tabSignup');
   const loginForm = document.getElementById('loginForm');
@@ -264,7 +259,6 @@
   const signupError = document.getElementById('signupError');
   const signupSuccess = document.getElementById('signupSuccess');
 
-  // Toggle tabs
   tabLogin.addEventListener('click', () => {
     tabLogin.classList.add('active');
     tabSignup.classList.remove('active');
@@ -287,7 +281,6 @@
     signupSuccess.textContent = '';
   }
 
-  // Login handler
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('loginEmail').value.trim();
@@ -306,7 +299,6 @@
     }
   });
 
-  // Signup handler
   signupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const shopName = document.getElementById('signupShopName').value.trim();
