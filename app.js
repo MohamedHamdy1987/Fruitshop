@@ -45,7 +45,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   if (!user) return;
 
-  // 2️⃣ تحقق الاشتراك
+  // 2️⃣ تحقق الاشتراك (مع إنشاء تلقائي إذا لزم)
   const isActive = await checkSubscription();
 
   if (!isActive) {
@@ -175,7 +175,6 @@ window.addEventListener("DOMContentLoaded", () => {
   const searchInput = document.querySelector(".search");
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
-      // يمكن تفعيل البحث لاحقاً
       console.log("Search:", e.target.value);
     });
   }
