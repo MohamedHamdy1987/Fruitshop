@@ -1,62 +1,57 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>نظام المحل</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>نظام المحل - سوق الخضار والفواكه</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<div class="bg"></div>
-
-<aside class="sidebar">
-  <div class="logo">
-    🍊 <span>نظام المحل</span>
-  </div>
-  <nav class="menu">
-    <button data-nav="dashboard">📊 الرئيسية</button>
-    <button data-nav="invoices">📄 الفواتير</button>
-    <button data-nav="sales">🛒 المبيعات</button>
-    <button data-nav="customers">👥 العملاء</button>
-    <button data-nav="suppliers">🚚 الموردين</button>
-    <button data-nav="tarhil">📋 الترحيلات</button>
-    <button data-nav="khazna">💰 الخزنة</button>
-    <button data-nav="market_shops">🏬 محلات السوق</button>
-    <button data-nav="employees">👷 الموظفين</button>
-  </nav>
-  <div class="sidebar-footer">
-    <p>⚡ محفوظ على السحابة</p>
-  </div>
-</aside>
-
-<main class="main">
-  <header class="topbar">
-    <div class="left">
-      <h3 id="page-title">الرئيسية</h3>
+<div class="app-wrapper">
+    <!-- الشريط العلوي مع اسم المحل والتاريخ -->
+    <div class="top-bar">
+        <div class="shop-info">
+            <h1 id="shopNameDisplay">محل الحاج حمدي السنوسي وأولاده</h1>
+            <p>إدارة متكاملة | محفوظ على السحابة</p>
+        </div>
+        <div class="date-box">
+            <span id="currentDate"></span>
+            <span id="dayCount">اليوم 17</span>
+        </div>
     </div>
-    <div class="right">
-      <input type="text" placeholder="بحث..." class="search">
-      <div class="user">👤</div>
-      <button id="logout-btn" class="btn-outline">🚪 خروج</button>
+
+    <!-- القوائم الرئيسية (أفقية) -->
+    <div class="nav-horizontal">
+        <button data-nav="dashboard">📊 الرئيسية</button>
+        <button data-nav="suppliers">🚚 الموردون</button>
+        <button data-nav="invoices">📄 الفواتير</button>
+        <button data-nav="sales">💰 المبيعات</button>
+        <button data-nav="customers">👥 العملاء</button>
+        <button data-nav="khazna">🏦 الخزينة</button>
+        <button data-nav="market_shops">🏪 محلات السوق</button>
+        <button data-nav="employees">👨‍💼 الموظفون</button>
+        <button data-nav="tarhil">📦 ترحيل</button>
     </div>
-  </header>
 
-  <section id="app" class="content fade-in"></section>
-</main>
-
-<div id="modal" class="modal hidden"></div>
-<div id="toast"></div>
-
-<div class="mobile-nav">
-  <button data-nav="dashboard">🏠</button>
-  <button data-nav="sales">🛒</button>
-  <button data-nav="invoices">📄</button>
-  <button data-nav="customers">👥</button>
-  <button data-nav="khazna">💰</button>
+    <!-- منطقة المحتوى الديناميكي -->
+    <div class="content-area" id="app">
+        <div class="loading">جاري التحميل...</div>
+    </div>
 </div>
 
-<script type="module" src="app.js"></script>
+<!-- النافذة المنبثقة الموحدة (لإضافة مورد، عميل، صنف، موظف، محل) -->
+<div id="universalModal" class="modal" style="display:none;">
+    <div class="modal-card">
+        <h3 id="modalTitle">إضافة جديد</h3>
+        <div id="modalFields"></div>
+        <div class="modal-buttons">
+            <button id="modalCloseBtn" class="btn-secondary">إلغاء</button>
+            <button id="modalSaveBtn" class="btn-primary">إضافة</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
