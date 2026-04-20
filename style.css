@@ -1,15 +1,20 @@
-/* ===== ألوان الهوية ===== */
+/* ===== ألوان الهوية الجديدة ===== */
 :root {
-  --primary-cream: #FDF8F2;
-  --secondary-gold: #C9A96E;
-  --accent-brown: #8B5E3C;
-  --text-dark: #3E2E21;
-  --text-soft: #6B4F32;
-  --border-light: #EADCC8;
+  --primary-green-light: #b8e0b5;
+  --primary-green-soft: #9bcd8e;
+  --primary-green-dark: #5c8f4c;
+  --primary-red-light: #f8d7da;
+  --primary-red-soft: #f5b7b1;
+  --primary-red-dark: #c95a4a;
+  --primary-silver: #e9ecef;
+  --primary-silver-dark: #ced4da;
+  --text-dark: #2d3e2b;
+  --text-soft: #4a6b3f;
+  --border-light: #dde6d5;
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
   --shadow-md: 0 6px 18px rgba(0,0,0,0.06);
-  --sidebar-bg: #F5EDE3;
-  --card-bg: #FFFFFF;
+  --sidebar-bg: #eaf5e8;
+  --card-bg: #ffffff;
 }
 
 * {
@@ -20,7 +25,7 @@
 
 body {
   font-family: 'Cairo', sans-serif;
-  background-color: var(--primary-cream);
+  background-color: var(--primary-green-light);
   color: var(--text-dark);
   display: flex;
   height: 100vh;
@@ -33,7 +38,7 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at 20% 30%, #FCF7F0, var(--primary-cream));
+  background: radial-gradient(circle at 20% 30%, #eef5ea, var(--primary-green-light));
   z-index: -2;
 }
 
@@ -52,7 +57,7 @@ body {
 .logo {
   font-size: 22px;
   font-weight: 800;
-  color: var(--accent-brown);
+  color: var(--primary-green-dark);
   padding: 0 16px 24px;
   display: flex;
   align-items: center;
@@ -92,11 +97,11 @@ body {
 }
 
 .menu button:hover {
-  background: rgba(139, 94, 60, 0.1);
+  background: rgba(92, 143, 76, 0.1);
 }
 
 .menu button.active {
-  background: var(--accent-brown);
+  background: var(--primary-green-dark);
   color: white;
 }
 
@@ -153,14 +158,14 @@ body {
 
 .user {
   font-size: 28px;
-  color: var(--accent-brown);
+  color: var(--primary-green-dark);
   cursor: pointer;
 }
 
 .btn-outline {
   background: transparent;
-  border: 1.5px solid var(--accent-brown);
-  color: var(--accent-brown);
+  border: 1.5px solid var(--primary-green-dark);
+  color: var(--primary-green-dark);
   padding: 10px 18px;
   border-radius: 30px;
   font-weight: 700;
@@ -169,7 +174,7 @@ body {
 }
 
 .btn-outline:hover {
-  background: var(--accent-brown);
+  background: var(--primary-green-dark);
   color: white;
 }
 
@@ -193,7 +198,7 @@ body {
   padding: 12px 24px;
   border-radius: 14px;
   border: none;
-  background: var(--accent-brown);
+  background: var(--primary-green-dark);
   color: white;
   font-family: 'Cairo', sans-serif;
   font-weight: 700;
@@ -203,18 +208,28 @@ body {
 }
 
 .btn:hover {
-  background: #6F4A2E;
+  background: #4a7a3b;
 }
 
 .btn-secondary {
   background: transparent;
-  border: 1.5px solid var(--accent-brown);
-  color: var(--accent-brown);
+  border: 1.5px solid var(--primary-green-dark);
+  color: var(--primary-green-dark);
 }
 
 .btn-secondary:hover {
-  background: var(--accent-brown);
+  background: var(--primary-green-dark);
   color: white;
+}
+
+.btn-danger {
+  background: var(--primary-red-dark);
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover {
+  background: #b24a3a;
 }
 
 /* ===== الجداول ===== */
@@ -253,7 +268,7 @@ body {
 
 .form-control:focus {
   outline: none;
-  border-color: var(--secondary-gold);
+  border-color: var(--primary-green-soft);
 }
 
 /* ===== الرسائل (Toast) ===== */
@@ -268,7 +283,7 @@ body {
 }
 
 .toast {
-  background: var(--accent-brown);
+  background: var(--primary-green-dark);
   color: white;
   padding: 14px 24px;
   border-radius: 40px;
@@ -280,6 +295,41 @@ body {
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(30px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+/* ===== النوافذ المنبثقة (مودال) ===== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-container {
+  background: white;
+  border-radius: 28px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+.modal-header {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary-green-dark);
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--border-light);
+  padding-bottom: 12px;
 }
 
 /* ===== شريط التنقل السفلي للموبايل ===== */
