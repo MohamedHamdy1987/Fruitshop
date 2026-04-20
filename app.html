@@ -1,57 +1,676 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>نظام المحل - سوق الخضار والفواكه</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>نظام المحل - لوحة التحكم</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* تنسيقات إضافية للنوافذ المنبثقة الداخلية */
+    .invoice-item-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .invoice-item-row input {
+      flex: 1;
+    }
+    .items-table {
+      width: 100%;
+      margin: 16px 0;
+    }
+    .total-amount {
+      font-size: 20px;
+      font-weight: bold;
+      color: var(--primary-green-dark);
+    }
+  </style>
 </head>
 <body>
+<div class="bg"></div>
 
-<div class="app-wrapper">
-    <!-- الشريط العلوي مع اسم المحل والتاريخ -->
-    <div class="top-bar">
-        <div class="shop-info">
-            <h1 id="shopNameDisplay">محل الحاج حمدي السنوسي وأولاده</h1>
-            <p>إدارة متكاملة | محفوظ على السحابة</p>
-        </div>
-        <div class="date-box">
-            <span id="currentDate"></span>
-            <span id="dayCount">اليوم 17</span>
-        </div>
-    </div>
-
-    <!-- القوائم الرئيسية (أفقية) -->
-    <div class="nav-horizontal">
-        <button data-nav="dashboard">📊 الرئيسية</button>
-        <button data-nav="suppliers">🚚 الموردون</button>
-        <button data-nav="invoices">📄 الفواتير</button>
-        <button data-nav="sales">💰 المبيعات</button>
-        <button data-nav="customers">👥 العملاء</button>
-        <button data-nav="khazna">🏦 الخزينة</button>
-        <button data-nav="market_shops">🏪 محلات السوق</button>
-        <button data-nav="employees">👨‍💼 الموظفون</button>
-        <button data-nav="tarhil">📦 ترحيل</button>
-    </div>
-
-    <!-- منطقة المحتوى الديناميكي -->
-    <div class="content-area" id="app">
-        <div class="loading">جاري التحميل...</div>
-    </div>
+<!-- الشريط الجانبي -->
+<div class="sidebar">
+  <div class="logo">
+    🍊 نظام <span>المحل</span>
+  </div>
+  <div class="menu">
+    <button data-nav="dashboard">📊 الرئيسية</button>
+    <button data-nav="customers">👥 العملاء</button>
+    <button data-nav="suppliers">🚚 الموردون</button>
+    <button data-nav="invoices">📄 الفواتير</button>
+    <button data-nav="khazna">🏦 الخزينة</button>
+    <button data-nav="market_shops">🏪 محلات السوق</button>
+    <button data-nav="employees">👨‍💼 الموظفون</button>
+    <button data-nav="tarhil">📦 ترحيل</button>
+    <button data-nav="sales">💰 المبيعات</button>
+  </div>
+  <div class="sidebar-footer">
+    <span id="currentDateFooter"></span>
+  </div>
 </div>
 
-<!-- النافذة المنبثقة الموحدة (لإضافة مورد، عميل، صنف، موظف، محل) -->
-<div id="universalModal" class="modal" style="display:none;">
-    <div class="modal-card">
-        <h3 id="modalTitle">إضافة جديد</h3>
-        <div id="modalFields"></div>
-        <div class="modal-buttons">
-            <button id="modalCloseBtn" class="btn-secondary">إلغاء</button>
-            <button id="modalSaveBtn" class="btn-primary">إضافة</button>
-        </div>
+<!-- المحتوى الرئيسي -->
+<div class="main">
+  <div class="topbar">
+    <div class="left">
+      <h3 id="pageTitle">الرئيسية</h3>
     </div>
+    <div class="right">
+      <input type="text" id="globalSearchInput" class="search" placeholder="بحث عام...">
+      <div class="user">👤</div>
+      <button id="logoutBtn" class="btn-outline">تسجيل خروج</button>
+    </div>
+  </div>
+  <div id="appContent">
+    <!-- سيتم تحميل المحتوى ديناميكياً -->
+    <div class="card">جاري التحميل...</div>
+  </div>
 </div>
 
-<script src="app.js"></script>
+<!-- شريط الموبايل -->
+<div class="mobile-nav">
+  <button data-nav="dashboard">📊</button>
+  <button data-nav="customers">👥</button>
+  <button data-nav="invoices">📄</button>
+  <button data-nav="khazna">🏦</button>
+  <button data-nav="menu">☰</button>
+</div>
+
+<!-- Toast container -->
+<div id="toast"></div>
+
+<!-- Modal عام لإضافة عناصر بسيطة -->
+<div id="genericModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header" id="genericModalTitle">إضافة</div>
+    <div id="genericModalFields"></div>
+    <div style="display: flex; gap: 12px; justify-content: flex-start; margin-top: 24px;">
+      <button id="genericModalConfirm" class="btn">إضافة</button>
+      <button id="genericModalCancel" class="btn-secondary">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal لإنشاء فاتورة (إضافة أصناف متعددة) -->
+<div id="invoiceModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container" style="max-width: 800px;">
+    <div class="modal-header">إنشاء فاتورة جديدة</div>
+    <div>
+      <label>ربط بعميل (اختياري):</label>
+      <select id="invoiceCustomerSelect" class="form-control"></select>
+    </div>
+    <hr>
+    <h4>إضافة صنف</h4>
+    <div class="invoice-item-row">
+      <input type="text" id="itemName" placeholder="اسم الصنف" class="form-control">
+      <input type="number" id="itemQty" placeholder="الكمية" value="1" class="form-control">
+      <input type="number" id="itemPrice" placeholder="سعر الوحدة" class="form-control">
+      <input type="text" id="itemUnit" placeholder="وحدة (كجم/علبة)" value="كجم" class="form-control">
+      <button id="addItemBtn" class="btn">➕ إضافة صنف</button>
+    </div>
+    <div id="invoiceItemsList"></div>
+    <div class="total-amount" id="invoiceTotal">الإجمالي: 0 ج.م</div>
+    <hr>
+    <div style="display: flex; gap: 12px; justify-content: flex-start;">
+      <button id="saveInvoiceBtn" class="btn">حفظ الفاتورة</button>
+      <button id="closeInvoiceBtn" class="btn-secondary">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal لعرض تفاصيل الفاتورة -->
+<div id="viewInvoiceModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header">تفاصيل الفاتورة</div>
+    <div id="invoiceDetails"></div>
+    <button id="closeViewInvoiceBtn" class="btn-secondary">إغلاق</button>
+  </div>
+</div>
+
+<!-- Modal لعرض حساب عميل/مورد -->
+<div id="accountModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container">
+    <div class="modal-header" id="accountModalTitle">الحساب</div>
+    <div id="accountDetails"></div>
+    <button id="closeAccountBtn" class="btn-secondary">إغلاق</button>
+  </div>
+</div>
+
+<script>
+  // ------------------- النظام الرئيسي (SPA) -------------------
+  (function() {
+    // --- دوال localStorage ---
+    function save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+    function load(key, def = []) {
+      const raw = localStorage.getItem(key);
+      if (!raw) return def;
+      try { return JSON.parse(raw); } catch(e) { return def; }
+    }
+
+    // --- البيانات الأساسية ---
+    let customers = load('customers');
+    let suppliers = load('suppliers');
+    let shops = load('shops');
+    let employees = load('employees');
+    let invoices = load('invoices');       // { id, date, customerId, items: [{name,qty,price,unit,total}], total }
+    let expenses = load('expenses');       // { id, description, amount, date }
+    let transfers = load('transfers');     // { id, date, amount, note }
+    let shopPurchases = load('shopPurchases');
+
+    function persistAll() {
+      save('customers', customers);
+      save('suppliers', suppliers);
+      save('shops', shops);
+      save('employees', employees);
+      save('invoices', invoices);
+      save('expenses', expenses);
+      save('transfers', transfers);
+      save('shopPurchases', shopPurchases);
+    }
+
+    // --- دوال مساعدة ---
+    function formatDate() {
+      return new Date().toLocaleDateString('ar-EG');
+    }
+    function showToast(msg, isError = false) {
+      const toastDiv = document.getElementById('toast');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.style.background = isError ? 'var(--primary-red-dark)' : 'var(--primary-green-dark)';
+      t.innerText = msg;
+      toastDiv.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // --- إدارة الفواتير المؤقتة ---
+    let currentInvoiceItems = [];
+    let currentInvoiceCustomerId = null;
+
+    function openInvoiceModal(customerId = null) {
+      currentInvoiceItems = [];
+      currentInvoiceCustomerId = customerId;
+      // تعبئة قائمة العملاء في select
+      const select = document.getElementById('invoiceCustomerSelect');
+      select.innerHTML = '<option value="">بدون عميل</option>';
+      customers.forEach(c => {
+        const option = document.createElement('option');
+        option.value = c.id;
+        option.textContent = `${c.name} (${c.phone})`;
+        if (customerId == c.id) option.selected = true;
+        select.appendChild(option);
+      });
+      renderInvoiceModalItems();
+      document.getElementById('invoiceModal').style.display = 'flex';
+    }
+
+    function renderInvoiceModalItems() {
+      const container = document.getElementById('invoiceItemsList');
+      if (currentInvoiceItems.length === 0) {
+        container.innerHTML = '<p>لا توجد أصناف مضافة.</p>';
+        document.getElementById('invoiceTotal').innerHTML = 'الإجمالي: 0 ج.م';
+        return;
+      }
+      let html = '<table class="table"><thead><tr><th>الصنف</th><th>الكمية</th><th>الوحدة</th><th>السعر</th><th>الإجمالي</th><th></th></tr></thead><tbody>';
+      let total = 0;
+      currentInvoiceItems.forEach((item, idx) => {
+        total += item.total;
+        html += `<tr>
+          <td>${item.name}</td>
+          <td>${item.qty}</td>
+          <td>${item.unit}</td>
+          <td>${item.price}</td>
+          <td>${item.total}</td>
+          <td><button class="btn-secondary removeItemBtn" data-idx="${idx}">❌</button></td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+      document.getElementById('invoiceTotal').innerHTML = `الإجمالي: ${total} ج.م`;
+      // ربط أزرار الحذف
+      document.querySelectorAll('.removeItemBtn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = parseInt(btn.getAttribute('data-idx'));
+          currentInvoiceItems.splice(idx, 1);
+          renderInvoiceModalItems();
+        });
+      });
+    }
+
+    function addItemToInvoice() {
+      const name = document.getElementById('itemName').value.trim();
+      const qty = parseFloat(document.getElementById('itemQty').value);
+      const price = parseFloat(document.getElementById('itemPrice').value);
+      const unit = document.getElementById('itemUnit').value.trim() || 'كجم';
+      if (!name || isNaN(qty) || isNaN(price) || qty <= 0 || price <= 0) {
+        showToast('يرجى إدخال اسم الصنف وكمية وسعر صحيحين', true);
+        return;
+      }
+      const total = qty * price;
+      currentInvoiceItems.push({ name, qty, price, unit, total });
+      // مسح الحقول
+      document.getElementById('itemName').value = '';
+      document.getElementById('itemQty').value = '1';
+      document.getElementById('itemPrice').value = '';
+      document.getElementById('itemUnit').value = 'كجم';
+      renderInvoiceModalItems();
+    }
+
+    function saveCurrentInvoice() {
+      if (currentInvoiceItems.length === 0) {
+        showToast('لا يمكن حفظ فاتورة بدون أصناف', true);
+        return;
+      }
+      const total = currentInvoiceItems.reduce((s,i)=>s+i.total,0);
+      const customerId = document.getElementById('invoiceCustomerSelect').value;
+      const newInvoice = {
+        id: Date.now(),
+        date: formatDate(),
+        items: [...currentInvoiceItems],
+        total: total,
+        customerId: customerId ? parseInt(customerId) : null
+      };
+      invoices.push(newInvoice);
+      persistAll();
+      // تحديث رصيد العميل
+      if (customerId) {
+        const customer = customers.find(c => c.id == parseInt(customerId));
+        if (customer) {
+          customer.balance = (customer.balance || 0) + total;
+          persistAll();
+        }
+      }
+      showToast(`تم حفظ الفاتورة رقم ${newInvoice.id}`);
+      document.getElementById('invoiceModal').style.display = 'none';
+      navigateTo('invoices');
+    }
+
+    // --- عرض تفاصيل الفاتورة ---
+    function showInvoiceDetails(invoiceId) {
+      const inv = invoices.find(i => i.id == invoiceId);
+      if (!inv) return;
+      let itemsHtml = '<h4>الأصناف:</h4><table class="table"><thead><tr><th>الصنف</th><th>الكمية</th><th>الوحدة</th><th>السعر</th><th>الإجمالي</th></tr></thead><tbody>';
+      inv.items.forEach(item => {
+        itemsHtml += `<tr><td>${item.name}</td><td>${item.qty}</td><td>${item.unit}</td><td>${item.price}</td><td>${item.total}</td></tr>`;
+      });
+      itemsHtml += `</tbody></table><p class="total-amount">المجموع الكلي: ${inv.total} ج.م</p>`;
+      document.getElementById('invoiceDetails').innerHTML = itemsHtml;
+      document.getElementById('viewInvoiceModal').style.display = 'flex';
+    }
+
+    // --- عرض حسابات العملاء والموردين ---
+    function showCustomerAccount(customerId) {
+      const customer = customers.find(c => c.id == customerId);
+      if (!customer) return;
+      const custInvoices = invoices.filter(inv => inv.customerId == customerId);
+      let html = `<h3>${customer.name}</h3><p>الهاتف: ${customer.phone}</p><p>الرصيد الحالي: ${customer.balance || 0} ج.م</p>`;
+      if (custInvoices.length) {
+        html += '<h4>الفواتير المسجلة:</h4><ul>';
+        custInvoices.forEach(inv => {
+          html += `<li>فاتورة رقم ${inv.id} - ${inv.date} - المبلغ: ${inv.total} ج.م</li>`;
+        });
+        html += '</ul>';
+      } else {
+        html += '<p>لا توجد فواتير مسجلة.</p>';
+      }
+      document.getElementById('accountModalTitle').innerText = `حساب العميل: ${customer.name}`;
+      document.getElementById('accountDetails').innerHTML = html;
+      document.getElementById('accountModal').style.display = 'flex';
+    }
+
+    function showSupplierAccount(supplierId) {
+      const supplier = suppliers.find(s => s.id == supplierId);
+      if (!supplier) return;
+      let html = `<h3>${supplier.name}</h3><p>الهاتف: ${supplier.phone}</p><p>الرصيد الحالي: ${supplier.balance || 0} ج.م</p>`;
+      document.getElementById('accountModalTitle').innerText = `حساب المورد: ${supplier.name}`;
+      document.getElementById('accountDetails').innerHTML = html;
+      document.getElementById('accountModal').style.display = 'flex';
+    }
+
+    // --- إضافة بيانات عامة ---
+    function addCustomer(name, phone, balance) {
+      customers.push({ id: Date.now(), name, phone, balance: parseFloat(balance) || 0 });
+      persistAll();
+      navigateTo('customers');
+    }
+    function addSupplier(name, phone) {
+      suppliers.push({ id: Date.now(), name, phone, balance: 0 });
+      persistAll();
+      navigateTo('suppliers');
+    }
+    function addShop(name, address) {
+      shops.push({ id: Date.now(), name, address });
+      persistAll();
+      navigateTo('market_shops');
+    }
+    function addEmployee(name, area, phone) {
+      employees.push({ id: Date.now(), name, area, phone });
+      persistAll();
+      navigateTo('employees');
+    }
+    function addExpense(desc, amount) {
+      expenses.push({ id: Date.now(), description: desc, amount: parseFloat(amount), date: formatDate() });
+      persistAll();
+      navigateTo('khazna');
+    }
+    function addTransfer(amount, note) {
+      transfers.push({ id: Date.now(), date: formatDate(), amount: parseFloat(amount), note: note || '' });
+      persistAll();
+      navigateTo('tarhil');
+    }
+    function buyFromShop(shopId, itemName, qty, price, unit) {
+      const total = qty * price;
+      shopPurchases.push({ id: Date.now(), shopId, date: new Date().toLocaleString(), item: itemName, quantity: qty, pricePerUnit: price, unit, total });
+      persistAll();
+      showToast(`تم شراء ${itemName} من المحل بمبلغ ${total} ج.م`);
+      navigateTo('market_shops');
+    }
+
+    // --- البحث العام ---
+    function globalSearch(query) {
+      if (!query.trim()) return [];
+      const q = query.trim().toLowerCase();
+      const results = [];
+      customers.forEach(c => { if (c.name.toLowerCase().includes(q) || c.phone.includes(q)) results.push({ type: 'عميل', data: c, link: 'customers', id: c.id }); });
+      suppliers.forEach(s => { if (s.name.toLowerCase().includes(q) || s.phone.includes(q)) results.push({ type: 'مورد', data: s, link: 'suppliers', id: s.id }); });
+      shops.forEach(shop => { if (shop.name.toLowerCase().includes(q)) results.push({ type: 'محل', data: shop, link: 'market_shops', id: shop.id }); });
+      employees.forEach(emp => { if (emp.name.toLowerCase().includes(q) || (emp.phone && emp.phone.includes(q))) results.push({ type: 'موظف', data: emp, link: 'employees', id: emp.id }); });
+      invoices.forEach(inv => { if (inv.id.toString().includes(q)) results.push({ type: 'فاتورة', data: inv, link: 'invoices', id: inv.id }); });
+      return results;
+    }
+
+    function showSearchResults(query) {
+      const results = globalSearch(query);
+      if (results.length === 0) { showToast('لا توجد نتائج', true); return; }
+      let msg = 'نتائج البحث:\n';
+      results.forEach(r => { msg += `${r.type}: ${r.data.name || r.data.id}\n`; });
+      alert(msg); // يمكن تحسينها لاحقاً
+    }
+
+    // --- دوال العرض (الصفحات) ---
+    function renderDashboard() {
+      const totalExpenses = expenses.reduce((s,e)=>s+e.amount,0);
+      const totalInvoices = invoices.reduce((s,i)=>s+i.total,0);
+      return `
+        <div class="card">
+          <h2>📊 لوحة التحكم</h2>
+          <p>مرحباً بك في نظام إدارة الخضار والفواكه</p>
+          <p>👥 العملاء: ${customers.length}</p>
+          <p>🚚 الموردون: ${suppliers.length}</p>
+          <p>🏪 المحلات: ${shops.length}</p>
+          <p>👨‍💼 الموظفون: ${employees.length}</p>
+          <p>📄 الفواتير: ${invoices.length} (إجمالي ${totalInvoices} ج.م)</p>
+          <p>💰 إجمالي المصروفات: ${totalExpenses} ج.م</p>
+        </div>
+      `;
+    }
+
+    function renderCustomers() {
+      let html = `<div class="card"><h2>👥 العملاء</h2>
+      <button class="btn" id="addCustomerBtn">➕ إضافة عميل</button>
+      <button class="btn-secondary" id="newInvoiceForCustomerBtn">📄 فاتورة لعميل</button>
+      <table class="table"><thead><tr><th>الاسم</th><th>الهاتف</th><th>الرصيد</th><th></th></tr></thead><tbody>`;
+      customers.forEach(c => {
+        html += `<tr><td>${c.name}</td><td>${c.phone}</td><td>${c.balance || 0} ج.م</td>
+        <td><button class="btn-secondary viewCustomer" data-id="${c.id}">عرض الحساب</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderSuppliers() {
+      let html = `<div class="card"><h2>🚚 الموردون</h2>
+      <button class="btn" id="addSupplierBtn">➕ إضافة مورد</button>
+      <table class="table"><thead><tr><th>الاسم</th><th>الهاتف</th><th>الرصيد</th><th></th></tr></thead><tbody>`;
+      suppliers.forEach(s => {
+        html += `<tr><td>${s.name}</td><td>${s.phone}</td><td>${s.balance || 0} ج.م</td>
+        <td><button class="btn-secondary viewSupplier" data-id="${s.id}">عرض الحساب</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderInvoices() {
+      let html = `<div class="card"><h2>📄 الفواتير</h2>
+      <button class="btn" id="createInvoiceBtn">➕ فاتورة جديدة</button>
+      <table class="table"><thead><tr><th>رقم</th><th>التاريخ</th><th>المجموع</th><th>العميل</th><th></th></tr></thead><tbody>`;
+      invoices.forEach(inv => {
+        const custName = inv.customerId ? (customers.find(c=>c.id==inv.customerId)?.name || 'غير معروف') : 'بدون عميل';
+        html += `<tr><td>${inv.id}</td><td>${inv.date}</td><td>${inv.total} ج.م</td><td>${custName}</td>
+        <td><button class="btn-secondary viewInvoiceBtn" data-id="${inv.id}">تفاصيل</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderKhazna() {
+      let html = `<div class="card"><h2>🏦 الخزينة - المصروفات</h2>
+      <button class="btn" id="addExpenseBtn">➕ تسجيل مصروف</button>
+      <table class="table"><thead><tr><th>البيان</th><th>المبلغ</th><th>التاريخ</th></tr></thead><tbody>`;
+      expenses.forEach(exp => {
+        html += `<tr><td>${exp.description}</td><td>${exp.amount} ج.م</td><td>${exp.date}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderMarketShops() {
+      let html = `<div class="card"><h2>🏪 محلات السوق</h2>
+      <button class="btn" id="addShopBtn">➕ إضافة محل</button>
+      <table class="table"><thead><tr><th>اسم المحل</th><th>العنوان</th><th></th></tr></thead><tbody>`;
+      shops.forEach(shop => {
+        html += `<tr><td>${shop.name}</td><td>${shop.address || '-'}</td>
+        <td><button class="btn-secondary buyFromShopBtn" data-id="${shop.id}">شراء من المحل</button></td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderEmployees() {
+      let html = `<div class="card"><h2>👨‍💼 الموظفون</h2>
+      <button class="btn" id="addEmployeeBtn">➕ إضافة موظف</button>
+      <table class="table"><thead><tr><th>الاسم</th><th>المنطقة</th><th>الهاتف</th></tr></thead><tbody>`;
+      employees.forEach(emp => {
+        html += `<tr><td>${emp.name}</td><td>${emp.area || '-'}</td><td>${emp.phone || '-'}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderTarhil() {
+      let html = `<div class="card"><h2>📦 ترحيل الأرصدة</h2>
+      <button class="btn" id="addTransferBtn">➕ ترحيل جديد</button>
+      <table class="table"><thead><tr><th>التاريخ</th><th>المبلغ</th><th>ملاحظات</th></tr></thead><tbody>`;
+      transfers.forEach(t => {
+        html += `<tr><td>${t.date}</td><td>${t.amount} ج.م</td><td>${t.note}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+      return html;
+    }
+
+    function renderSales() {
+      return `<div class="card"><h2>💰 المبيعات</h2><p>يمكنك عرض تقارير المبيعات من الفواتير.</p></div>`;
+    }
+
+    // --- التنقل ---
+    let currentPage = 'dashboard';
+    function navigateTo(page) {
+      currentPage = page;
+      const contentDiv = document.getElementById('appContent');
+      let html = '';
+      switch(page) {
+        case 'dashboard': html = renderDashboard(); break;
+        case 'customers': html = renderCustomers(); break;
+        case 'suppliers': html = renderSuppliers(); break;
+        case 'invoices': html = renderInvoices(); break;
+        case 'khazna': html = renderKhazna(); break;
+        case 'market_shops': html = renderMarketShops(); break;
+        case 'employees': html = renderEmployees(); break;
+        case 'tarhil': html = renderTarhil(); break;
+        case 'sales': html = renderSales(); break;
+        default: html = renderDashboard();
+      }
+      contentDiv.innerHTML = html;
+      document.getElementById('pageTitle').innerText = document.querySelector(`[data-nav="${page}"]`)?.innerText || page;
+      attachPageEvents();
+    }
+
+    function attachPageEvents() {
+      // العملاء
+      const addCustomerBtn = document.getElementById('addCustomerBtn');
+      if (addCustomerBtn) {
+        addCustomerBtn.onclick = () => openGenericModal('إضافة عميل', [
+          { type: 'text', placeholder: 'الاسم', id: 'cName', key: 'name' },
+          { type: 'tel', placeholder: 'الهاتف', id: 'cPhone', key: 'phone' },
+          { type: 'number', placeholder: 'الرصيد المبدئي', id: 'cBalance', key: 'balance', value: '0' }
+        ], (vals) => addCustomer(vals.name, vals.phone, vals.balance));
+      }
+      const newInvoiceForCustomer = document.getElementById('newInvoiceForCustomerBtn');
+      if (newInvoiceForCustomer) {
+        newInvoiceForCustomer.onclick = () => {
+          const custId = prompt('أدخل ID العميل (موجود في الجدول)');
+          if (custId) openInvoiceModal(parseInt(custId));
+          else openInvoiceModal(null);
+        };
+      }
+      // الموردين
+      const addSupplierBtn = document.getElementById('addSupplierBtn');
+      if (addSupplierBtn) {
+        addSupplierBtn.onclick = () => openGenericModal('إضافة مورد', [
+          { type: 'text', placeholder: 'الاسم', id: 'sName', key: 'name' },
+          { type: 'tel', placeholder: 'الهاتف', id: 'sPhone', key: 'phone' }
+        ], (vals) => addSupplier(vals.name, vals.phone));
+      }
+      // المحلات
+      const addShopBtn = document.getElementById('addShopBtn');
+      if (addShopBtn) {
+        addShopBtn.onclick = () => openGenericModal('إضافة محل', [
+          { type: 'text', placeholder: 'اسم المحل', id: 'shName', key: 'name' },
+          { type: 'text', placeholder: 'العنوان', id: 'shAddress', key: 'address' }
+        ], (vals) => addShop(vals.name, vals.address));
+      }
+      // الموظفين
+      const addEmployeeBtn = document.getElementById('addEmployeeBtn');
+      if (addEmployeeBtn) {
+        addEmployeeBtn.onclick = () => openGenericModal('إضافة موظف', [
+          { type: 'text', placeholder: 'الاسم', id: 'eName', key: 'name' },
+          { type: 'text', placeholder: 'المنطقة', id: 'eArea', key: 'area' },
+          { type: 'tel', placeholder: 'الهاتف', id: 'ePhone', key: 'phone' }
+        ], (vals) => addEmployee(vals.name, vals.area, vals.phone));
+      }
+      // الفواتير
+      const createInvoiceBtn = document.getElementById('createInvoiceBtn');
+      if (createInvoiceBtn) createInvoiceBtn.onclick = () => openInvoiceModal(null);
+      // عرض تفاصيل الفاتورة
+      document.querySelectorAll('.viewInvoiceBtn').forEach(btn => {
+        btn.onclick = (e) => showInvoiceDetails(parseInt(btn.getAttribute('data-id')));
+      });
+      // عرض حسابات العملاء والموردين
+      document.querySelectorAll('.viewCustomer').forEach(btn => {
+        btn.onclick = (e) => showCustomerAccount(parseInt(btn.getAttribute('data-id')));
+      });
+      document.querySelectorAll('.viewSupplier').forEach(btn => {
+        btn.onclick = (e) => showSupplierAccount(parseInt(btn.getAttribute('data-id')));
+      });
+      // المصروفات
+      const addExpenseBtn = document.getElementById('addExpenseBtn');
+      if (addExpenseBtn) {
+        addExpenseBtn.onclick = () => openGenericModal('تسجيل مصروف', [
+          { type: 'text', placeholder: 'البيان', id: 'expDesc', key: 'desc' },
+          { type: 'number', placeholder: 'المبلغ (ج.م)', id: 'expAmount', key: 'amount' }
+        ], (vals) => addExpense(vals.desc, vals.amount));
+      }
+      // الترحيل
+      const addTransferBtn = document.getElementById('addTransferBtn');
+      if (addTransferBtn) {
+        addTransferBtn.onclick = () => openGenericModal('ترحيل رصيد', [
+          { type: 'number', placeholder: 'المبلغ (ج.م)', id: 'transAmount', key: 'amount' },
+          { type: 'text', placeholder: 'ملاحظات', id: 'transNote', key: 'note' }
+        ], (vals) => addTransfer(vals.amount, vals.note));
+      }
+      // شراء من المحل
+      document.querySelectorAll('.buyFromShopBtn').forEach(btn => {
+        btn.onclick = (e) => {
+          const shopId = parseInt(btn.getAttribute('data-id'));
+          openGenericModal('شراء من المحل - إضافة صنف', [
+            { type: 'text', placeholder: 'اسم الصنف', id: 'itemName', key: 'name' },
+            { type: 'number', placeholder: 'الكمية', id: 'qty', key: 'qty', value: '1' },
+            { type: 'number', placeholder: 'سعر الوحدة', id: 'price', key: 'price' },
+            { type: 'text', placeholder: 'الوحدة', id: 'unit', key: 'unit', value: 'كجم' }
+          ], (vals) => buyFromShop(shopId, vals.name, parseFloat(vals.qty), parseFloat(vals.price), vals.unit));
+        };
+      });
+    }
+
+    // --- Generic Modal ---
+    let genericCallback = null;
+    function openGenericModal(title, fields, onSave) {
+      const modal = document.getElementById('genericModal');
+      document.getElementById('genericModalTitle').innerText = title;
+      const container = document.getElementById('genericModalFields');
+      container.innerHTML = '';
+      fields.forEach(f => {
+        const input = document.createElement('input');
+        input.type = f.type || 'text';
+        input.placeholder = f.placeholder;
+        input.id = f.id;
+        input.value = f.value || '';
+        input.classList.add('form-control');
+        container.appendChild(input);
+      });
+      genericCallback = onSave;
+      modal.style.display = 'flex';
+      document.getElementById('genericModalConfirm').onclick = () => {
+        const values = {};
+        fields.forEach(f => {
+          const el = document.getElementById(f.id);
+          if (el) values[f.key] = el.value;
+        });
+        if (genericCallback) genericCallback(values);
+        modal.style.display = 'none';
+      };
+      document.getElementById('genericModalCancel').onclick = () => { modal.style.display = 'none'; };
+    }
+
+    // --- البحث ---
+    const searchInput = document.getElementById('globalSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') showSearchResults(searchInput.value);
+      });
+    }
+
+    // --- ربط أزرار التنقل ---
+    function bindNavButtons() {
+      document.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.onclick = () => navigateTo(btn.getAttribute('data-nav'));
+      });
+    }
+
+    // --- إغلاق المودالات ---
+    document.getElementById('closeInvoiceBtn')?.addEventListener('click', () => document.getElementById('invoiceModal').style.display = 'none');
+    document.getElementById('saveInvoiceBtn')?.addEventListener('click', saveCurrentInvoice);
+    document.getElementById('addItemBtn')?.addEventListener('click', addItemToInvoice);
+    document.getElementById('closeViewInvoiceBtn')?.addEventListener('click', () => document.getElementById('viewInvoiceModal').style.display = 'none');
+    document.getElementById('closeAccountBtn')?.addEventListener('click', () => document.getElementById('accountModal').style.display = 'none');
+
+    // --- تسجيل الخروج (محاكاة) ---
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+      localStorage.clear();
+      window.location.href = 'index.html';
+    });
+
+    // --- التاريخ ---
+    document.getElementById('currentDateFooter').innerText = new Date().toLocaleDateString('ar-EG');
+
+    // --- بدء التشغيل ---
+    window.onload = () => {
+      bindNavButtons();
+      navigateTo('dashboard');
+    };
+  })();
+</script>
 </body>
 </html>
