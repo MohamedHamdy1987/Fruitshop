@@ -6,23 +6,29 @@
   <title>نظام محل الخضار والفواكه</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <style>
-    /* ===== ألوان الهوية ===== */
+    /* ===== ألوان الهوية الجديدة: أخضر فاتح، أحمر فاتح، فضي ===== */
     :root {
-      --primary-cream: #FDF8F2;
-      --secondary-gold: #C9A96E;
-      --accent-brown: #8B5E3C;
-      --text-dark: #3E2E21;
-      --text-soft: #6B4F32;
-      --border-light: #EADCC8;
+      --primary-green-light: #b8e0b5;
+      --primary-green-soft: #9bcd8e;
+      --primary-green-dark: #5c8f4c;
+      --primary-red-light: #f8d7da;
+      --primary-red-soft: #f5b7b1;
+      --primary-red-dark: #c95a4a;
+      --primary-silver: #e9ecef;
+      --primary-silver-dark: #ced4da;
+      --white: #ffffff;
+      --bg-light: #f1f3f5;
+      --text-dark: #2d3e2b;
+      --text-soft: #4a6b3f;
+      --border-light: #dde6d5;
       --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
       --shadow-md: 0 6px 18px rgba(0,0,0,0.06);
-      --bg-light: #F9F3EC;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Cairo', sans-serif;
-      background-color: var(--primary-cream);
+      background-color: var(--bg-light);
       color: var(--text-dark);
       line-height: 1.6;
     }
@@ -30,47 +36,53 @@
     /* ===== شريط التنقل ===== */
     nav {
       position: sticky; top: 0; z-index: 50;
-      background: white; padding: 14px 24px;
+      background: var(--white); padding: 14px 24px;
       display: flex; justify-content: space-between; align-items: center;
       box-shadow: var(--shadow-sm); border-bottom: 1px solid var(--border-light);
     }
-    .nav-logo { font-size: 20px; font-weight: 900; color: var(--accent-brown); }
+    .nav-logo { font-size: 20px; font-weight: 900; color: var(--primary-green-dark); }
     .nav-buttons { display: flex; gap: 10px; }
     .nav-btn {
       padding: 10px 20px; border-radius: 30px; font-weight: 700; font-size: 14px;
       cursor: pointer; font-family: 'Cairo', sans-serif; transition: 0.2s;
     }
     .btn-outline-nav {
-      background: transparent; border: 1.5px solid var(--accent-brown);
-      color: var(--accent-brown);
+      background: transparent; border: 1.5px solid var(--primary-green-dark);
+      color: var(--primary-green-dark);
+    }
+    .btn-outline-nav:hover {
+      background: var(--primary-green-light);
     }
     .btn-primary-nav {
-      background: var(--accent-brown); border: none; color: white;
+      background: var(--primary-green-dark); border: none; color: white;
+    }
+    .btn-primary-nav:hover {
+      background: #4a7a3b;
     }
 
     /* ===== هيرو ===== */
     .hero {
-      background: linear-gradient(135deg, #F5EDE3 0%, #FDF8F2 100%);
+      background: linear-gradient(135deg, var(--primary-green-light) 0%, var(--bg-light) 100%);
       text-align: center; padding: 70px 20px 80px; position: relative; overflow: hidden;
     }
     .hero h1 { font-size: clamp(26px, 6vw, 44px); font-weight: 900; margin-bottom: 16px; color: var(--text-dark); }
     .hero p { font-size: clamp(15px, 3vw, 18px); color: var(--text-soft); max-width: 560px; margin: 0 auto 28px; }
     .hero-btns { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
     .btn-white {
-      padding: 14px 28px; background: white; color: var(--accent-brown);
+      padding: 14px 28px; background: var(--white); color: var(--primary-green-dark);
       border: none; border-radius: 40px; font-weight: 800; font-size: 16px;
       cursor: pointer; box-shadow: var(--shadow-sm);
     }
     .btn-outline-white {
-      padding: 14px 28px; background: transparent; color: white;
-      border: 2px solid white; border-radius: 40px; font-weight: 700; font-size: 16px;
-      cursor: pointer; background-color: rgba(255,255,255,0.1);
+      padding: 14px 28px; background: transparent; color: var(--primary-green-dark);
+      border: 2px solid var(--white); border-radius: 40px; font-weight: 700; font-size: 16px;
+      cursor: pointer; background-color: rgba(255,255,255,0.2);
     }
 
     /* ===== أقسام عامة ===== */
-    .section { padding: 60px 20px; text-align: center; }
+    .section { padding: 60px 20px; text-align: center; background: var(--white); }
     .container { max-width: 1000px; margin: 0 auto; }
-    .section-title { font-size: clamp(22px, 4vw, 28px); font-weight: 900; margin-bottom: 8px; }
+    .section-title { font-size: clamp(22px, 4vw, 28px); font-weight: 900; margin-bottom: 8px; color: var(--primary-green-dark); }
     .section-sub { font-size: 15px; color: var(--text-soft); margin-bottom: 36px; }
 
     /* ===== بطاقات الميزات ===== */
@@ -79,7 +91,7 @@
       gap: 18px; margin-top: 20px;
     }
     .feature-card {
-      background: white; padding: 24px 18px; border-radius: 20px;
+      background: var(--white); padding: 24px 18px; border-radius: 20px;
       border: 1px solid var(--border-light); box-shadow: var(--shadow-sm);
       transition: transform 0.2s;
     }
@@ -87,25 +99,25 @@
     .feature-icon { font-size: 32px; margin-bottom: 10px; }
 
     /* ===== قسم المشكلة ===== */
-    .problem-section { background: white; padding: 60px 20px; }
+    .problem-section { background: var(--primary-silver); padding: 60px 20px; }
     .problem-grid {
       display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
       max-width: 700px; margin: 0 auto 30px;
     }
     .problem-item {
-      background: #fef2f2; padding: 16px; border-radius: 14px;
-      border-right: 4px solid #ef4444; text-align: right; font-weight: 600; color: #991b1b;
+      background: var(--primary-red-light); padding: 16px; border-radius: 14px;
+      border-right: 4px solid var(--primary-red-dark); text-align: right; font-weight: 600; color: #a13e2f;
     }
     .solution-item {
-      background: #f0fdf4; padding: 16px; border-radius: 14px;
-      border-right: 4px solid #22c55e; text-align: right; font-weight: 600; color: #166534;
+      background: var(--primary-green-light); padding: 16px; border-radius: 14px;
+      border-right: 4px solid var(--primary-green-dark); text-align: right; font-weight: 600; color: var(--primary-green-dark);
     }
 
     /* ===== الشهادات ===== */
     .testimonials { display: flex; flex-direction: column; gap: 14px; max-width: 560px; margin: 0 auto; }
     .testimonial {
-      background: white; padding: 20px; border-radius: 16px; text-align: right;
-      border-right: 4px solid var(--accent-brown); box-shadow: var(--shadow-sm);
+      background: var(--white); padding: 20px; border-radius: 16px; text-align: right;
+      border-right: 4px solid var(--primary-green-dark); box-shadow: var(--shadow-sm);
     }
 
     /* ===== الأسعار ===== */
@@ -114,31 +126,32 @@
       gap: 20px; max-width: 600px; margin: 0 auto;
     }
     .price-card {
-      background: white; padding: 28px 24px; border-radius: 20px;
+      background: var(--white); padding: 28px 24px; border-radius: 20px;
       border: 2px solid var(--border-light);
     }
-    .price-card.featured { border-color: var(--accent-brown); position: relative; }
+    .price-card.featured { border-color: var(--primary-green-dark); position: relative; }
     .price-card.featured::before {
       content: "⭐ الأوفر"; position: absolute; top: -12px; right: 50%;
-      transform: translateX(50%); background: var(--accent-brown); color: white;
+      transform: translateX(50%); background: var(--primary-green-dark); color: white;
       padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 700;
     }
-    .price-amount { font-size: 36px; font-weight: 900; color: var(--accent-brown); }
+    .price-amount { font-size: 36px; font-weight: 900; color: var(--primary-green-dark); }
     .price-btn {
-      width: 100%; padding: 13px; background: var(--accent-brown); color: white;
+      width: 100%; padding: 13px; background: var(--primary-green-dark); color: white;
       border: none; border-radius: 40px; font-weight: 700; cursor: pointer;
     }
+    .price-btn:hover { background: #4a7a3b; }
 
     /* ===== CTA ===== */
     .cta-section {
-      background: linear-gradient(135deg, var(--accent-brown), #A0714B);
+      background: linear-gradient(135deg, var(--primary-green-dark), #4a7a3b);
       color: white; padding: 60px 20px; text-align: center;
     }
-    .cta-section .btn-white { color: var(--accent-brown); }
+    .cta-section .btn-white { color: var(--primary-green-dark); }
 
     /* ===== الفوتر ===== */
     footer {
-      background: var(--text-dark); color: rgba(255,255,255,0.7);
+      background: var(--primary-green-dark); color: rgba(255,255,255,0.7);
       text-align: center; padding: 20px; font-size: 13px;
     }
 
@@ -150,7 +163,7 @@
       z-index: 1000; padding: 16px;
     }
     .auth-modal {
-      background: white; border-radius: 32px; padding: 32px 28px;
+      background: var(--white); border-radius: 32px; padding: 32px 28px;
       max-width: 460px; width: 100%; box-shadow: 0 20px 30px rgba(0,0,0,0.1);
       border: 1px solid var(--border-light); position: relative;
     }
@@ -167,7 +180,7 @@
       cursor: pointer; border-radius: 30px; background: transparent; border: none;
       color: var(--text-soft); font-family: 'Cairo', sans-serif;
     }
-    .auth-tab.active { color: var(--accent-brown); background: rgba(139, 94, 60, 0.08); }
+    .auth-tab.active { color: var(--primary-green-dark); background: rgba(92, 143, 76, 0.08); }
     .auth-form { display: flex; flex-direction: column; gap: 18px; }
     .form-group input {
       padding: 16px 18px; border: 1.5px solid var(--border-light);
@@ -175,11 +188,11 @@
       width: 100%;
     }
     .btn-auth {
-      background: var(--accent-brown); color: white; border: none;
+      background: var(--primary-green-dark); color: white; border: none;
       padding: 16px; border-radius: 16px; font-weight: 700; font-size: 18px;
       cursor: pointer; margin-top: 10px;
     }
-    .error-message { color: #D32F2F; font-size: 14px; min-height: 24px; text-align: center; }
+    .error-message { color: var(--primary-red-dark); font-size: 14px; min-height: 24px; text-align: center; }
     .success-message { color: #2E7D32; font-size: 14px; text-align: center; }
     .hidden { display: none !important; }
 
@@ -245,14 +258,14 @@
   <p class="section-title">💬 آراء العملاء</p>
   <p class="section-sub">ناس زيك بيستخدموا النظام وشايفين الفرق</p>
   <div class="testimonials">
-    <div class="testimonial">"بقيت عارف حسابي كل يوم بسهولة، الدنيا اتنظمت وما بقيتش خايف أضيع فلوس"<b>— تاجر فواكه بالجملة</b></div>
-    <div class="testimonial">"الفواتير بتتعمل لوحدها لما الصنف يخلص، وبعت الكشف للمورد على واتساب في ثانية"<b>— محل خضار بالجملة</b></div>
-    <div class="testimonial">"أحسن استثمار عملته، وفر عليّا ساعات كل يوم وبقيت عارف صافيّ بالدقة"<b>— تاجر بالسوق</b></div>
+    <div class="testimonial">"بقيت عارف حسابي كل يوم بسهولة، الدنيا اتنظمت وما بقيتش خايف أضيع فلوس"<br><b>— تاجر فواكه بالجملة</b></div>
+    <div class="testimonial">"الفواتير بتتعمل لوحدها لما الصنف يخلص، وبعت الكشف للمورد على واتساب في ثانية"<br><b>— محل خضار بالجملة</b></div>
+    <div class="testimonial">"أحسن استثمار عملته، وفر عليّا ساعات كل يوم وبقيت عارف صافيّ بالدقة"<br><b>— تاجر بالسوق</b></div>
   </div>
 </div>
 
 <!-- الأسعار -->
-<div class="section" style="background: white;">
+<div class="section" style="background: var(--primary-silver);">
   <div class="container">
     <p class="section-title">💰 الأسعار</p>
     <p class="section-sub">اشتراك بسيط يوفر عليك أضعافه</p>
@@ -357,14 +370,11 @@
     signupSuccess.textContent = '';
   }
 
-  // التبديل بين التبويبات
   tabLogin.addEventListener('click', () => openAuthModal('login'));
   tabSignup.addEventListener('click', () => openAuthModal('signup'));
 
-  // إغلاق عند النقر خارج البطاقة
   modal.addEventListener('click', (e) => { if (e.target === modal) closeAuthModal(); });
 
-  // معالجة تسجيل الدخول
   loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('modalLoginEmail').value.trim();
@@ -375,7 +385,6 @@
     else loginError.textContent = result.error || 'بيانات الدخول غير صحيحة';
   });
 
-  // معالجة إنشاء الحساب
   signupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const shopName = document.getElementById('modalShopName').value.trim();
